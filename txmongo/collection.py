@@ -604,7 +604,7 @@ class Collection(object):
         else:
             raise TypeError("TxMongo: insert takes a document or a list of documents.")
 
-        docs = [BSON.encode(d) for d in docs]
+        docs = [BSON.encode(d, codec_options=self.codec_options) for d in docs]
         insert = Insert(flags=flags, collection=str(self), documents=docs)
 
         def on_proto(proto):
