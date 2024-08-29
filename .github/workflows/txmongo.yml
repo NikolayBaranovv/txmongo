@@ -8,41 +8,18 @@ jobs:
     strategy:
       matrix:
         mongodb-version: ['4.2', '4.4']
-        python: ["3.8", "3.9", "3.10", "3.11", "3.12"]
-        pymongo: ['3.13.0', '4.7.0', "4.8.0"]
-        twisted: ['22.10.0', '23.10.0', '24.3.0', "24.7.0"]
     steps:
       - uses: actions/checkout@v3
       - name: Start MongoDB (27017)
-        uses: supercharge/mongodb-github-action@1.8.0
+        uses: supercharge/mongodb-github-action@1.11.0
         with:
           mongodb-version: ${{ matrix.mongodb-version }}
-      - name: Install tox and any other packages
+      - name: Install tox
         run: pip install tox
-      - name: Run tox
-        run: tox -e "${{ matrix.python }}-${{ matrix.twisted }}-${{ matrix.pymongo }}-basic"
+      - name: Run tests
+        run: tox
       - name: Archive artifacts
         uses: actions/upload-artifact@v2
         with:
           name: code-coverage-report
           path: htmlcov
-
-  advanced:
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        python: [ "3.8", "3.9", "3.10", "3.11", "3.12" ]
-        pymongo: [ '3.13.0', '4.7.0', "4.8.0" ]
-        twisted: [ '22.10.0', '23.10.0', '24.3.0', "24.7.0" ]
-    steps:
-      - uses: actions/checkout@v3
-      - name: Install MongoDB 4.4
-        run: |
-          wget -qO - https://www.mongodb.org/static/pgp/server-4.4.asc | sudo apt-key add -
-          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu noble/mongodb-org/4.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.4.list
-          sudo apt-get update
-          sudo apt-get install -y --allow-downgrades mongodb-org-server=4.4.18
-      - name: Install tox and any other packages
-        run: pip install tox
-      - name: Run tox
-        run: tox -e "${{ matrix.python }}-${{ matrix.twisted }}-${{ matrix.pymongo }}-advanced"
