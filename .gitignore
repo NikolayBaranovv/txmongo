@@ -13,3 +13,4 @@ txmongo.egg-info
 dist/
 htmlcov/
 .tox/
+data/mongo
