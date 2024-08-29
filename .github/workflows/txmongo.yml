@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        mongodb-version: ['4.2', '4.4']
+        mongodb-version: ['3.6', '4.2', '4.4']
     steps:
       - uses: actions/checkout@v3
       - name: Start MongoDB (27017)
@@ -17,9 +17,24 @@ jobs:
       - name: Install tox
         run: pip install tox
       - name: Run tests
-        run: tox
+        run: tox -f basic
       - name: Archive artifacts
         uses: actions/upload-artifact@v2
         with:
           name: code-coverage-report
           path: htmlcov
+
+  advanced:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install MongoDB 4.4
+        run: |
+          wget -qO - https://www.mongodb.org/static/pgp/server-4.4.asc | sudo apt-key add -
+          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/4.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.4.list
+          sudo apt-get update
+          sudo apt-get install -y --allow-downgrades mongodb-org-server=4.4.18
+      - name: Install tox and any other packages
+        run: pip install tox
+      - name: Run tox
+        run: tox -f advanced
