@@ -17,66 +17,48 @@ from __future__ import absolute_import, division
 import base64
 import hashlib
 
-from bson import BSON, SON, Binary, PY3
+from bson import BSON, SON, Binary
 from collections import namedtuple
 from hashlib import sha1
 import hmac
 import logging
 from pymongo import auth
 from pymongo.errors import AutoReconnect, ConnectionFailure, DuplicateKeyError, OperationFailure, \
-    NotMasterError, CursorNotFound
+    CursorNotFound
 from random import SystemRandom
 import struct
 from twisted.internet import defer, protocol, error
 from twisted.python import failure, log
 from txmongo.utils import get_err
 
-
-if PY3:
-    _from_bytes = int.from_bytes
-    _to_bytes = int.to_bytes
-else:
-    from binascii import (hexlify as _hexlify, unhexlify as _unhexlify)
-
-    def _from_bytes(value, dummy, _int=int, _hexlify=_hexlify):
-        """An implementation of int.from_bytes for python 2.x."""
-        return _int(_hexlify(value), 16)
-
-
-    def _to_bytes(value, length, dummy, _unhexlify=_unhexlify):
-        """An implementation of int.to_bytes for python 2.x."""
-        fmt = '%%0%dx' % (2 * length,)
-        return _unhexlify(fmt % value)
-
+try:
+    from pymongo.errors import NotPrimaryError
+except ImportError:
+    # For pymongo < 3.12
+    from pymongo.errors import NotMasterError as NotPrimaryError
 
 try:
-    # The fastest option, if it's been compiled to use OpenSSL's HMAC.
-    from backports.pbkdf2 import pbkdf2_hmac as _hi
+    from hashlib import pbkdf2_hmac as _hi
 except ImportError:
-    try:
-        # Python 2.7.8+, or Python 3.4+.
-        from hashlib import pbkdf2_hmac as _hi
-    except ImportError:
+    def _hi(hash_name, data, salt, iterations):
+        """A simple implementation of PBKDF2-HMAC."""
+        mac = hmac.HMAC(data, None, getattr(hashlib, hash_name))
 
-        def _hi(hash_name, data, salt, iterations):
-            """A simple implementation of PBKDF2-HMAC."""
-            mac = hmac.HMAC(data, None, getattr(hashlib, hash_name))
+        def _digest(msg, mac=mac):
+            """Get a digest for msg."""
+            _mac = mac.copy()
+            _mac.update(msg)
+            return _mac.digest()
 
-            def _digest(msg, mac=mac):
-                """Get a digest for msg."""
-                _mac = mac.copy()
-                _mac.update(msg)
-                return _mac.digest()
+        from_bytes = int.from_bytes
+        to_bytes = int.to_bytes
 
-            from_bytes = _from_bytes
-            to_bytes = _to_bytes
-
-            _u1 = _digest(salt + b'\x00\x00\x00\x01')
-            _ui = from_bytes(_u1, 'big')
-            for _ in range(iterations - 1):
-                _u1 = _digest(_u1)
-                _ui ^= from_bytes(_u1, 'big')
-            return to_bytes(_ui, mac.digest_size, 'big')
+        _u1 = _digest(salt + b'\x00\x00\x00\x01')
+        _ui = from_bytes(_u1, 'big')
+        for _ in range(iterations - 1):
+            _u1 = _digest(_u1)
+            _ui ^= from_bytes(_u1, 'big')
+        return to_bytes(_ui, mac.digest_size, 'big')
 
 
 INT_MAX = 2147483647
@@ -421,7 +403,7 @@ class MongoProtocol(MongoServerProtocol, MongoClientProtocol):
                 msg = "TxMongo: " + doc.get("$err", "Unknown error")
                 fail_conn = False
                 if code == 13435:
-                    err = NotMasterError(msg)
+                    err = NotPrimaryError(msg)
                     fail_conn = True
                 else:
                     err = OperationFailure(msg, code)

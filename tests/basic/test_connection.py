@@ -55,8 +55,6 @@ class TestMongoConnection(unittest.TestCase):
         yield test.disconnect()
         test = connection.ConnectionPool("mongodb://127.0.0.1/dbname")
         yield test.disconnect()
-        test = connection.ConnectionPool(u"mongodb://127.0.0.1/dbname")
-        yield test.disconnect()
         self.assertRaises(AssertionError, connection.ConnectionPool, object)
         self.assertRaises(AssertionError, connection.ConnectionPool, 1)
 

@@ -65,11 +65,11 @@ class TestMongoObjects(unittest.TestCase):
 
         try:
             # names
-            self.assertEqual(db.name, u"mydb")
-            self.assertEqual(coll.name, u"mycol")
-            self.assertEqual(coll.full_name, u"mydb.mycol")
-            self.assertEqual(coll.subcoll.name, u"mycol.subcoll")
-            self.assertEqual(coll.subcoll.full_name, u"mydb.mycol.subcoll")
+            self.assertEqual(db.name, "mydb")
+            self.assertEqual(coll.name, "mycol")
+            self.assertEqual(coll.full_name, "mydb.mycol")
+            self.assertEqual(coll.subcoll.name, "mycol.subcoll")
+            self.assertEqual(coll.subcoll.full_name, "mydb.mycol.subcoll")
 
             # database
             self.assertTrue(coll.database is db)
@@ -201,7 +201,7 @@ class TestGridFsObjects(unittest.TestCase):
             with self.assertRaises(TypeError):
                 yield grid_in_file.write(1)
             with self.assertRaises(TypeError):
-                yield grid_in_file.write(u"0xDEADBEEF")
+                yield grid_in_file.write("0xDEADBEEF")
             with self.assertRaises(AttributeError):
                 _ = grid_in_file.test
         grid_in_file.test = 1
@@ -264,7 +264,7 @@ class TestGridFsObjects(unittest.TestCase):
         db = conn.test
         yield self._drop_gridfs(db)
         gfs = GridFS(db)  # Default collection
-        yield gfs.delete(u"test")
+        yield gfs.delete("test")
 
         _ = gfs.new_file(filename="test_1", contentType="text/plain", chunk_size=65536)
         yield conn.disconnect()

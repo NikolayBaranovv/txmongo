@@ -183,7 +183,7 @@ class Collection(object):
 
     @staticmethod
     def _gen_index_name(keys):
-        return u'_'.join([u"%s_%s" % item for item in keys])
+        return '_'.join(["%s_%s" % item for item in keys])
 
     def _list_collections_3_0(self):
         def on_ok(response):

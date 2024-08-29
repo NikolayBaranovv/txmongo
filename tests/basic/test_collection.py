@@ -127,7 +127,7 @@ class TestIndexInfo(unittest.TestCase):
 
         yield coll.create_index(qf.sort(qf.ASCENDING("hello")))
         indices = yield coll.index_information()
-        self.assert_(u"hello_1" in indices)
+        self.assert_("hello_1" in indices)
 
         yield coll.drop_indexes()
         count = len((yield coll.index_information()))
@@ -167,7 +167,7 @@ class TestIndexInfo(unittest.TestCase):
 
         yield coll.ensure_index(qf.sort(qf.ASCENDING("hello")))
         indices = yield coll.index_information()
-        self.assert_(u"hello_1" in indices)
+        self.assert_("hello_1" in indices)
 
     @defer.inlineCallbacks
     def test_index_info(self):
