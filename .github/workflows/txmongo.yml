@@ -6,7 +6,7 @@ jobs:
   basic:
     runs-on: ubuntu-latest
     strategy:
-      matrix: &test-versions
+      matrix:
         mongodb-version: ['4.2', '4.4']
         python: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         pymongo: ['3.13.0', '4.7.0', "4.8.0"]
@@ -31,7 +31,9 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        <<: *test-versions
+        python: [ "3.8", "3.9", "3.10", "3.11", "3.12" ]
+        pymongo: [ '3.13.0', '4.7.0', "4.8.0" ]
+        twisted: [ '22.10.0', '23.10.0', '24.3.0', "24.7.0" ]
     steps:
       - uses: actions/checkout@v3
       - name: Install MongoDB 4.4
