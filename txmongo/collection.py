@@ -604,7 +604,7 @@ class Collection(object):
         else:
             raise TypeError("TxMongo: insert takes a document or a list of documents.")
 
-        docs = [BSON.encode(d) for d in docs]
+        docs = [BSON.encode(d, codec_options=self.codec_options) for d in docs]
         insert = Insert(flags=flags, collection=str(self), documents=docs)
 
         def on_proto(proto):
@@ -797,8 +797,8 @@ class Collection(object):
         if upsert:
             flags |= UPDATE_UPSERT
 
-        spec = BSON.encode(spec)
-        document = BSON.encode(document)
+        spec = BSON.encode(spec, codec_options=self.codec_options)
+        document = BSON.encode(document, codec_options=self.codec_options)
         update = Update(flags=flags, collection=str(self),
                         selector=spec, update=document)
 
@@ -960,7 +960,7 @@ class Collection(object):
         if single:
             flags |= DELETE_SINGLE_REMOVE
 
-        spec = BSON.encode(spec)
+        spec = BSON.encode(spec, codec_options=self.codec_options)
         delete = Delete(flags=flags, collection=str(self), selector=spec)
 
         def on_proto(proto):

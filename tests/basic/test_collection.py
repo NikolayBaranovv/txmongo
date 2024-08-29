@@ -17,6 +17,9 @@ Based on pymongo driver's test_collection.py
 """
 
 from __future__ import absolute_import, division
+
+import uuid
+
 from pymongo import errors
 from twisted.internet import defer
 from twisted.trial import unittest
@@ -447,3 +450,25 @@ class TestFindSignatureCompat(unittest.TestCase):
             {"filter": {'x': 42}, "projection": {'a': 1}, "skip": 5, "limit": 6,
              "sort": qf.sort([('s', 1)])}
         )
+
+
+
+class TestUseUuid(unittest.TestCase):
+
+    def setUp(self):
+        self.conn = txmongo.MongoConnection(mongo_host, mongo_port)
+        self.db = self.conn.mydb
+
+    @defer.inlineCallbacks
+    def tearDown(self):
+        yield self.conn.drop_database(self.db)
+        yield self.conn.disconnect()
+
+    @defer.inlineCallbacks
+    def test_use_uuid(self):
+        coll = yield self.db.create_collection("coll")
+        task_id = uuid.uuid4()
+        yield coll.insert({'task_id': task_id}, safe=True)
+
+        doc = yield self.db.coll.find_one(fields={"_id": 0})
+        self.assertEqual(doc, {'task_id': task_id})
