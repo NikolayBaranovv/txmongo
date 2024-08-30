@@ -25,15 +25,21 @@ jobs:
           path: htmlcov
 
   advanced:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        mongodb-version: ['3.6', '4.2', '4.4']
     steps:
       - uses: actions/checkout@v3
-      - name: Install MongoDB 4.4
+      - name: Install MongoDB ${{ matrix.mongodb-version }}
         run: |
-          wget -qO - https://www.mongodb.org/static/pgp/server-4.4.asc | sudo apt-key add -
-          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/4.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.4.list
+          wget -qO - https://www.mongodb.org/static/pgp/server-${{ matrix.mongodb-version }}.asc | sudo apt-key add -
+          echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/${{ matrix.mongodb-version }} multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-${{ matrix.mongodb-version }}.list
           sudo apt-get update
-          sudo apt-get install -y --allow-downgrades mongodb-org-server=4.4.29
+          sudo apt-get install -y --allow-downgrades mongodb-org-server
+      - name: Install Python
+        run: |
+            sudo apt-get install -y python3 python3-pip
       - name: Install tox and any other packages
         run: pip install tox
       - name: Run advanced tests in tox
