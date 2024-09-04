@@ -235,7 +235,7 @@ class _Connection(ReconnectingClientFactory):
             return defer.succeed(None)
 
 
-class ConnectionPool(object):
+class ConnectionPool:
     __index = 0
     __pool = None
     __pool_size = None

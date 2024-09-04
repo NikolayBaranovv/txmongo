@@ -112,7 +112,7 @@ class KillCursors(namedtuple("KillCursors", ["len", "request_id", "response_to",
                 zero=0, n_cursors=0, cursors=None, **kwargs):
 
         n_cursors = len(cursors)
-        return super(KillCursors, cls).__new__(cls, length, request_id, response_to,
+        return super().__new__(cls, length, request_id, response_to,
                                                opcode, zero, n_cursors, cursors)
 
 
@@ -121,7 +121,7 @@ class Delete(namedtuple("Delete",
                          "flags", "selector"])):
     def __new__(cls, len=0, request_id=0, response_to=0, opcode=OP_DELETE,
                 zero=0, collection='', flags=0, selector=None):
-        return super(Delete, cls).__new__(cls, len, request_id, response_to,
+        return super().__new__(cls, len, request_id, response_to,
                                           opcode, zero, collection,
                                           flags, selector)
 
@@ -131,7 +131,7 @@ class Getmore(namedtuple("Getmore", ["len", "request_id", "response_to",
                                      "n_to_return", "cursor_id"])):
     def __new__(cls, len=0, request_id=0, response_to=0, opcode=OP_GETMORE,
                 zero=0, collection='', n_to_return=-1, cursor_id=-1):
-        return super(Getmore, cls).__new__(cls, len, request_id, response_to,
+        return super().__new__(cls, len, request_id, response_to,
                                            opcode, zero, collection,
                                            n_to_return, cursor_id)
 
@@ -141,7 +141,7 @@ class Insert(namedtuple("Insert", ["len", "request_id", "response_to",
                                    "documents"])):
     def __new__(cls, len=0, request_id=0, response_to=0, opcode=OP_INSERT,
                 flags=0, collection='', documents=None):
-        return super(Insert, cls).__new__(cls, len, request_id, response_to,
+        return super().__new__(cls, len, request_id, response_to,
                                           opcode, flags, collection, documents)
 
 
@@ -156,7 +156,7 @@ class Reply(namedtuple("Reply", ["len", "request_id", "response_to", "opcode",
         if n_returned is None:
             n_returned = len(documents)
         documents = [b if isinstance(b, BSON) else BSON.encode(b) for b in documents]
-        return super(Reply, cls).__new__(cls, _len, request_id, response_to,
+        return super().__new__(cls, _len, request_id, response_to,
                                          opcode, response_flags, cursor_id,
                                          starting_from, n_returned,
                                          documents)
@@ -174,7 +174,7 @@ class Query(namedtuple("Query", ["len", "request_id", "response_to", "opcode",
             query = BSON.encode(query)
         if fields is not None and not isinstance(fields, BSON):
             fields = BSON.encode(fields)
-        return super(Query, cls).__new__(cls, len, request_id, response_to,
+        return super().__new__(cls, len, request_id, response_to,
                                          opcode, flags, collection, n_to_skip,
                                          n_to_return, query, fields)
 
@@ -184,7 +184,7 @@ class Update(namedtuple("Update", ["len", "request_id", "response_to",
                                    "selector", "update"])):
     def __new__(cls, len=0, request_id=0, response_to=0, opcode=OP_UPDATE,
                 zero=0, collection='', flags=0, selector=None, update=None):
-        return super(Update, cls).__new__(cls, len, request_id, response_to,
+        return super().__new__(cls, len, request_id, response_to,
                                           opcode, zero, collection, flags,
                                           selector, update)
 

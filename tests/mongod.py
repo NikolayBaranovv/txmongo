@@ -23,7 +23,7 @@ from twisted.internet import defer, reactor
 from twisted.internet.error import ProcessDone
 
 
-class Mongod(object):
+class Mongod:
 
     # FIXME: this message might change in future versions of MongoDB
     # but waiting for this message is faster than pinging tcp port
