@@ -10,7 +10,7 @@ jobs:
         python-version: ['3.8', '3.11', '3.12']
         mongodb-version: ['3.6', '4.2', '4.4']
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Start MongoDB on port 27017
         uses: supercharge/mongodb-github-action@1.11.0
         with:
@@ -24,7 +24,7 @@ jobs:
       - name: Run basic tests in tox
         run: tox -f py${{ matrix.python-version }} basic
       - name: Archive artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: code-coverage-report
           path: htmlcov
@@ -36,7 +36,7 @@ jobs:
         python-version: ['3.8', '3.11', '3.12']
         mongodb-version: ['4.2', '4.4']
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install MongoDB ${{ matrix.mongodb-version }}
         run: |
           wget -qO - https://www.mongodb.org/static/pgp/server-${{ matrix.mongodb-version }}.asc | sudo apt-key add -
