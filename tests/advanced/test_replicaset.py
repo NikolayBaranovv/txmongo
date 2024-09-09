@@ -24,7 +24,7 @@ from twisted.internet import defer, reactor
 from txmongo.connection import MongoConnection, ConnectionPool
 from txmongo.errors import TimeExceeded
 from txmongo.protocol import QUERY_SLAVE_OK, MongoProtocol
-from tests.mongod import Mongod
+from tests.mongod import LocalMongod
 
 
 class TestReplicaSet(unittest.TestCase):
@@ -59,7 +59,7 @@ class TestReplicaSet(unittest.TestCase):
 
     @defer.inlineCallbacks
     def setUp(self):
-        self.__mongod = [Mongod(port=p, replset=self.rsname) for p in self.ports]
+        self.__mongod = [LocalMongod(port=p, replset=self.rsname) for p in self.ports]
         yield defer.gatherResults([mongo.start() for mongo in self.__mongod])
 
         yield defer.gatherResults([self.__check_reachable(port) for port in self.ports])
