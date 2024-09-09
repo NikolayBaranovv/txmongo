@@ -31,7 +31,7 @@ from twisted.python.compat import comparable
 
 
 @comparable
-class Collection(object):
+class Collection:
     """Creates new :class:`Collection` object
 
     :param database:

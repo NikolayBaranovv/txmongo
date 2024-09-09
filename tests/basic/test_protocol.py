@@ -26,7 +26,7 @@ from txmongo.protocol import MongoClientProtocol, MongoDecoder, Insert, Query, \
     DELETE_SINGLE_REMOVE, CursorNotFound
 
 
-class _FakeTransport(object):
+class _FakeTransport:
     """Catches all content that MongoClientProtocol wants to send over the wire"""
 
     def __init__(self):
