@@ -24,8 +24,7 @@ from twisted.internet import defer, ssl
 from txmongo import connection
 from txmongo.protocol import MongoAuthenticationError
 
-from tests.mongod import Mongod
-
+from tests.mongod import create_mongod
 
 mongo_host = "localhost"
 mongo_port = 27018
@@ -57,34 +56,15 @@ class TestMongoAuth(unittest.TestCase):
         return connection.ConnectionPool(mongo_uri, pool_size)
 
     @defer.inlineCallbacks
-    def createUserAdmin(self):
-        conn = self.__get_connection()
+    def setUp(self):
+        self.__mongod = create_mongod(port=mongo_port, auth=True, rootCreds=(self.ua_login, self.ua_password))
+        yield self.__mongod.start()
+        self.addCleanup(self.clean)
 
-        try:
-            self.ismaster = yield conn.admin.command("ismaster")
-
-            yield conn.admin.command("createUser", self.ua_login,
-                                     pwd=self.ua_password,
-                                     roles=[{"role": "userAdminAnyDatabase",
-                                             "db": "admin"}])
-
-            try:
-                # This should fail if authentication enabled in MongoDB since
-                # we've created user but didn't authenticated
-                yield conn[self.db1][self.coll].find_one()
-
-                yield conn.admin.command("dropUser", self.ua_login)
-                raise unittest.SkipTest("Authentication tests require authorization enabled "
-                                        "in MongoDB configuration file")
-            except OperationFailure:
-                pass
-        finally:
-            yield conn.disconnect()
-
-    @defer.inlineCallbacks
-    def createDBUsers(self):
         conn = self.__get_connection()
         yield conn["admin"].authenticate(self.ua_login, self.ua_password)
+
+        self.ismaster = yield conn.admin.command("ismaster")
 
         yield conn[self.db1].command("createUser", self.login1,
                                      pwd=self.password1,
@@ -99,15 +79,6 @@ class TestMongoAuth(unittest.TestCase):
         yield conn.disconnect()
 
     @defer.inlineCallbacks
-    def setUp(self):
-        self.__mongod = Mongod(port=mongo_port, auth=True)
-        yield self.__mongod.start()
-        self.addCleanup(self.clean)
-
-        yield self.createUserAdmin()
-        yield self.createDBUsers()
-
-    @defer.inlineCallbacks
     def clean(self):
         try:
             conn = self.__get_connection()
@@ -119,7 +90,6 @@ class TestMongoAuth(unittest.TestCase):
             yield conn[self.db2][self.coll].drop()
             yield conn[self.db1].command("dropUser", self.login1)
             yield conn[self.db2].command("dropUser", self.login2)
-            yield conn["admin"].command("dropUser", self.ua_login)
             yield conn.disconnect()
         finally:
             yield self.__mongod.stop()
@@ -283,9 +253,15 @@ class TestMongoDBCR(unittest.TestCase):
     def setUp(self):
         self.dbpath = tempfile.mkdtemp()
 
-        mongod_noauth = Mongod(port=mongo_port, auth=False, dbpath=self.dbpath)
-        yield mongod_noauth.start()
+        mongod_init = create_mongod(port=mongo_port, auth=True, rootCreds=(self.ua_login, self.ua_password), dbpath=self.dbpath)
+        yield mongod_init.start()
+        conn = connection.MongoConnection(mongo_host, mongo_port)
+        yield conn.admin.command('ismaster')
+        yield conn.disconnect()
+        yield mongod_init.stop()
 
+        mongod_noauth = create_mongod(port=mongo_port, auth=False, dbpath=self.dbpath)
+        yield mongod_noauth.start()
         try:
             try:
                 conn = connection.MongoConnection(mongo_host, mongo_port)
@@ -306,14 +282,12 @@ class TestMongoDBCR(unittest.TestCase):
             shutil.rmtree(self.dbpath)
             raise
 
-        self.mongod = Mongod(port=mongo_port, auth=True, dbpath=self.dbpath)
+        self.mongod = create_mongod(port=mongo_port, auth=True, dbpath=self.dbpath)
         yield self.mongod.start()
 
         try:
             conn = connection.MongoConnection(mongo_host, mongo_port)
             try:
-                yield conn.admin.command("createUser", self.ua_login, pwd=self.ua_password,
-                                         roles=[{"role": "userAdminAnyDatabase", "db": "admin"}])
                 yield conn.admin.authenticate(self.ua_login, self.ua_password)
 
                 yield conn[self.db1].command("createUser", self.login1, pwd=self.password1,
@@ -506,6 +480,7 @@ SJob7FjDAWWJeLCfsmu6Vy2OVg==
         tmp = tempfile.NamedTemporaryFile(delete=False)
         tmp.write(content.encode())
         tmp.close()
+        os.chmod(tmp.name, 0o666)
         return tmp.name
 
     @defer.inlineCallbacks
@@ -522,7 +497,7 @@ SJob7FjDAWWJeLCfsmu6Vy2OVg==
             certificateFileName = self.client_certfile,
         )
 
-        mongod_noauth = Mongod(port=mongo_port, auth=False, dbpath=self.dbpath)
+        mongod_noauth = create_mongod(port=mongo_port, auth=False, dbpath=self.dbpath)
         yield mongod_noauth.start()
 
         try:
@@ -534,10 +509,10 @@ SJob7FjDAWWJeLCfsmu6Vy2OVg==
             yield conn.disconnect()
             yield mongod_noauth.stop()
 
-        self.mongod = Mongod(port=mongo_port, auth=True, dbpath=self.dbpath,
-                             args=["--clusterAuthMode", "x509", "--sslMode", "requireSSL",
-                                   "--sslPEMKeyFile", self.server_keyfile,
-                                   "--sslCAFile", self.ca_certfile])
+        self.mongod = create_mongod(port=mongo_port, auth=True, dbpath=self.dbpath,
+                                  args=["--clusterAuthMode", "x509"],
+                                  tlsCertificateKeyFile=self.server_keyfile,
+                                  tlsCAFile=self.ca_certfile)
         try:
             yield self.mongod.start()
         except:
