@@ -16,8 +16,10 @@
 from __future__ import absolute_import, division
 
 import os
+import string
 import tempfile
 import shutil
+import random
 from abc import abstractmethod, ABCMeta
 from typing import Union, List
 
@@ -63,7 +65,7 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
 
     @defer.inlineCallbacks
     def start(self):
-        d = defer.Deferred()
+        d = defer.Deferred().addTimeout(5, reactor)
         self._notify_waiting.append(d)
 
         args = yield defer.maybeDeferred(self.get_run_command)
@@ -74,7 +76,10 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
         args = [arg.encode() for arg in args]
 
         from os import environ
+        print(f"{args = }")
+        # print(f"{environ = }")
         self._proc = reactor.spawnProcess(self, args[0], args, env=environ)
+        print(f"WARN {self._proc = }")
         yield d
 
     def _post_start_configure(self):
@@ -103,6 +108,10 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
 
     @defer.inlineCallbacks
     def childDataReceived(self, child_fd, data):
+        if child_fd == 2:
+            print(f"ERROR! {data = }")
+
+
         self._output += data
         if self._configured:
             return
@@ -212,14 +221,29 @@ class LocalMongod(MongodProcess):
 
 
 class DockerMongod(MongodProcess):
+    mongodb_container_name_prefix = 'txmongo-tests-mongodb-'
+
     def __init__(self, *args, **kwargs):
         self.version = kwargs.pop("version")
+        self.network = kwargs.pop("network")
+        self.container_name = self.mongodb_container_name_prefix + ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
         super().__init__(*args, **kwargs)
 
     def get_run_command(self):
         mongo3 = self.version.startswith('3.')
 
-        envs = []
+        envs = [
+            '--name', self.container_name
+        ]
+
+        if self.network:
+            envs.extend(
+                [
+                    '--network', self.network,
+                ]
+            )
+
+
         if self.rootCreds:
             envs.extend([
                 "-e", f"MONGO_INITDB_ROOT_USERNAME={self.rootCreds[0]}",
@@ -281,9 +305,26 @@ class DockerMongod(MongodProcess):
 
         return False
 
+    # def processEnded(self, reason):
+    #     super().processEnded(reason)
+    #     args = [
+    #         "docker",
+    #         "stop",
+    #         "--force",
+    #         '--name', self.container_name
+    #     ]
+    #     args = [arg.encode() for arg in args]
+    #
+    #     from os import environ
+    #     print(f"processEnded {args = }")
+    #     self._proc = reactor.spawnProcess(self, args[0], args, env=environ)
+
 
 def create_mongod(*args, **kwargs):
     if os.environ.get("TXMONGO_RUN_MONGOD_IN_DOCKER") == "yes":
         version = os.environ["TXMONGO_MONGOD_DOCKER_VERSION"]
-        return DockerMongod(version=version, *args, **kwargs)
+        network = None
+        if os.environ.get("TXMONGO_MONGOD_DOCKER_NETWORK_NAME") is not None:
+            network = os.environ["TXMONGO_MONGOD_DOCKER_NETWORK_NAME"]
+        return DockerMongod(version=version, network=network, *args, **kwargs)
     return LocalMongod(*args, **kwargs)
