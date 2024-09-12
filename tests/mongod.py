@@ -65,7 +65,7 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
 
     @defer.inlineCallbacks
     def start(self):
-        d = defer.Deferred().addTimeout(5, reactor)
+        d = defer.Deferred().addTimeout(10, reactor)
         self._notify_waiting.append(d)
 
         args = yield defer.maybeDeferred(self.get_run_command)
@@ -110,7 +110,7 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
     def childDataReceived(self, child_fd, data):
         if child_fd == 2:
             print(f"ERROR! {data = }")
-
+        print(f"{data = }")
 
         self._output += data
         if self._configured:
@@ -126,6 +126,7 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
             d.callback(None)
 
     def processEnded(self, reason):
+        print(f"processEnded {reason = }")
         self._end_reason = reason
         defs, self._notify_stop, self._notify_waiting = self._notify_stop + self._notify_waiting, [], []
         for d in defs:
@@ -133,6 +134,7 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
                 d.callback(None)
             else:
                 d.errback(reason)
+        # print(f"processEnded {self.output().decode() = }")
 
     def output(self):
         return self._output
@@ -293,6 +295,7 @@ class DockerMongod(MongodProcess):
         ]
 
     def process_is_ready(self) -> bool:
+        print(f"______________________________")
         if b'about to fork child process' in self._output:
             for msg in self.success_messages:
                 index = self._output.find(msg)
@@ -301,7 +304,7 @@ class DockerMongod(MongodProcess):
 
                 return msg in self._output[index+1: ]
         else:
-            super().process_is_ready()
+            return super().process_is_ready()
 
         return False
 

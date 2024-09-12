@@ -508,7 +508,6 @@ class _Pinger(ClientFactory):
 
 class MongoConnection(ConnectionPool):
     def __init__(self, host="127.0.0.1", port=27017, pool_size=1, **kwargs):
-        print(f"MongoConnection {host = } {port = }")
         uri = "mongodb://%s:%d/" % (host, port)
         ConnectionPool.__init__(self, uri, pool_size=pool_size, **kwargs)
 
