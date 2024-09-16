@@ -76,10 +76,7 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
         args = [arg.encode() for arg in args]
 
         from os import environ
-        print(f"{args = }")
-        # print(f"{environ = }")
         self._proc = reactor.spawnProcess(self, args[0], args, env=environ)
-        print(f"WARN {self._proc = }")
         yield d
 
     def _post_start_configure(self):
@@ -107,10 +104,7 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
         return any(msg in self._output for msg in self.success_messages)
 
     @defer.inlineCallbacks
-    def childDataReceived(self, child_fd, data):
-        if child_fd == 2:
-            print(f"ERROR! {data = }")
-        print(f"{data = }")
+    def childDataReceived(self, child_fd: int, data: bytes):
 
         self._output += data
         if self._configured:
@@ -126,7 +120,6 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
             d.callback(None)
 
     def processEnded(self, reason):
-        print(f"processEnded {reason = }")
         self._end_reason = reason
         defs, self._notify_stop, self._notify_waiting = self._notify_stop + self._notify_waiting, [], []
         for d in defs:
@@ -295,7 +288,6 @@ class DockerMongod(MongodProcess):
         ]
 
     def process_is_ready(self) -> bool:
-        print(f"______________________________")
         if b'about to fork child process' in self._output:
             for msg in self.success_messages:
                 index = self._output.find(msg)
@@ -308,19 +300,14 @@ class DockerMongod(MongodProcess):
 
         return False
 
-    # def processEnded(self, reason):
-    #     super().processEnded(reason)
-    #     args = [
-    #         "docker",
-    #         "stop",
-    #         "--force",
-    #         '--name', self.container_name
-    #     ]
-    #     args = [arg.encode() for arg in args]
-    #
-    #     from os import environ
-    #     print(f"processEnded {args = }")
-    #     self._proc = reactor.spawnProcess(self, args[0], args, env=environ)
+    def kill(self, signal):
+        args = [
+            "docker",
+            "kill", "-s", str(signal),
+            self.container_name
+        ]
+
+        yield run_and_get_output(args)
 
 
 def create_mongod(*args, **kwargs):

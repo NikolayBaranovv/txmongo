@@ -37,5 +37,7 @@ run(['docker', 'stop', mongodb_basic_test_container_name])
 
 run(['docker', 'network', 'rm', "--force", mongodb_network_name])
 
-# if need manually delete containers docker container rm --force $(docker ps -q --filter "name=txmongo-tests-")
-# run some version run_tests_with_docker.py --mongodb-version 4.4 -f advanced py3.11 pymongo480 tw247
+# if need manually delete containers:
+#           docker container rm --force $(docker ps -q --filter "name=txmongo-tests-")
+# run some version:
+#           ./bin/run_tests_with_docker.py --mongodb-version 4.4 -f advanced py3.11 pymongo480 tw247
