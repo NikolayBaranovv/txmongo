@@ -45,7 +45,6 @@ class TestReplicaSet(unittest.TestCase):
         else:
             return [37017, 37018, 37019]
 
-
     rsname = "rs1"
 
     @property
@@ -55,10 +54,10 @@ class TestReplicaSet(unittest.TestCase):
                 "_id": self.rsname,
                 "members": [
                     {
-                     "_id": i,
-                     "host": f"{mongo.container_name}:27017",
-                     # We assume first member to be master
-                     "priority": 2 if i == 0 else 1
+                        "_id": i,
+                        "host": f"{mongo.container_name}:27017",
+                        # We assume first member to be master
+                        "priority": 2 if i == 0 else 1
                     }
                     for i, mongo in enumerate(self.__mongod)
                 ]
@@ -67,19 +66,17 @@ class TestReplicaSet(unittest.TestCase):
             "_id": self.rsname,
             "members": [
                 {
-                 "_id": i,
-                 "host": f"localhost:{port}",
-                 # We assume first member to be master
-                 "priority": 2 if i == 0 else 1
+                    "_id": i,
+                    "host": f"localhost:{port}",
+                    # We assume first member to be master
+                    "priority": 2 if i == 0 else 1
                 }
                 for i, port in enumerate(self.ports)
             ]
         }
 
-
     __init_timeout = 60
     __ping_interval = 0.5
-
 
     def __sleep(self, delay):
         d = defer.Deferred()
@@ -165,16 +162,18 @@ class TestReplicaSet(unittest.TestCase):
     def test_SwitchToMasterOnConnect(self):
         # Reverse hosts order
         try:
-            conn = ConnectionPool(f"mongodb://localhost:{self.ports[1]},localhost:{self.ports[0]},localhost:{self.ports[2]}")
+            # need schema because in rs_config we have internal ports,
+            # but python process would connect to external
+            conn = ConnectionPool(f"mongodb://localhost:{self.ports[1]},"
+                                  f"localhost:{self.ports[0]},"
+                                  f"localhost:{self.ports[2]}")
             result = yield conn.db.coll.find({'x': 42})
             self.assertEqual(result, [])
         finally:
             yield conn.disconnect()
 
-
         # txmongo will do log.err() for AutoReconnects
         self.flushLoggedErrors(AutoReconnect)
-
 
     @defer.inlineCallbacks
     def test_AutoReconnect(self):
@@ -207,7 +206,6 @@ class TestReplicaSet(unittest.TestCase):
         # this will force primary to step down, triggering an AutoReconnect that bubbles up
         # through the connection pool to the client
         command = conn.admin.command(SON([('replSetStepDown', 86400), ('force', 1)]))
-        print(f"{command = }")
         self.assertFailure(command, AutoReconnect)
 
         yield conn.disconnect()
@@ -220,7 +218,7 @@ class TestReplicaSet(unittest.TestCase):
 
             yield conn.db.coll.insert({'x': 42}, safe=True)
 
-            self.__mongod[0].kill(signal.SIGSTOP)
+            yield self.__mongod[0].kill(signal.SIGSTOP)
 
             while True:
                 try:
@@ -232,7 +230,7 @@ class TestReplicaSet(unittest.TestCase):
                     pass
 
         finally:
-            self.__mongod[0].kill(signal.SIGCONT)
+            yield self.__mongod[0].kill(signal.SIGCONT)
             yield conn.disconnect()
             self.flushLoggedErrors(AutoReconnect)
 
@@ -244,11 +242,11 @@ class TestReplicaSet(unittest.TestCase):
 
             yield conn.db.coll.insert({'x': 42}, safe=True)
 
-            self.__mongod[0].kill(signal.SIGSTOP)
+            yield self.__mongod[0].kill(signal.SIGSTOP)
 
             while True:
                 try:
-                    yield conn.db.coll.find_one(deadline=time()+2)
+                    yield conn.db.coll.find_one(deadline=time() + 2)
                     self.fail("TimeExceeded not raised!")
                 except TimeExceeded:
                     break  # this is what we should have returned
@@ -256,7 +254,7 @@ class TestReplicaSet(unittest.TestCase):
                     pass
 
         finally:
-            self.__mongod[0].kill(signal.SIGCONT)
+            yield self.__mongod[0].kill(signal.SIGCONT)
             yield conn.disconnect()
             self.flushLoggedErrors(AutoReconnect)
 
@@ -268,7 +266,7 @@ class TestReplicaSet(unittest.TestCase):
 
             yield conn.db.coll.insert({'x': 42}, safe=True)
 
-            self.__mongod[0].kill(signal.SIGSTOP)
+            yield self.__mongod[0].kill(signal.SIGSTOP)
 
             while True:
                 try:
@@ -280,7 +278,7 @@ class TestReplicaSet(unittest.TestCase):
                     pass
 
         finally:
-            self.__mongod[0].kill(signal.SIGCONT)
+            yield self.__mongod[0].kill(signal.SIGCONT)
             yield conn.disconnect()
             self.flushLoggedErrors(AutoReconnect)
 
@@ -314,13 +312,18 @@ class TestReplicaSet(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_StaleConnection(self):
-        conn = MongoConnection("localhost", self.ports[0], ping_interval = 5, ping_timeout = 5)
+        # conn = MongoConnection("localhost", self.ports[0], ping_interval = 5, ping_timeout = 5)
+        conn = ConnectionPool(f"mongodb://localhost:{self.ports[1]},"
+                              f"localhost:{self.ports[0]},"
+                              f"localhost:{self.ports[2]}",
+                              ping_interval=5, ping_timeout=5
+                              )
         try:
             yield conn.db.coll.count()
             # check that 5s pingers won't break connection if it is healthy
             yield self.__sleep(6)
             yield conn.db.coll.count()
-            self.__mongod[0].kill(signal.SIGSTOP)
+            yield self.__mongod[0].kill(signal.SIGSTOP)
             yield self.__sleep(0.2)
             while True:
                 try:

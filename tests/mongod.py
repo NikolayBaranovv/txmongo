@@ -300,6 +300,7 @@ class DockerMongod(MongodProcess):
 
         return False
 
+    @defer.inlineCallbacks
     def kill(self, signal):
         args = [
             "docker",
