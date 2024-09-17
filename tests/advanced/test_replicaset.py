@@ -166,7 +166,9 @@ class TestReplicaSet(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_SlaveOk(self):
-        conn = ConnectionPool(self.master_uri_with_secondary)
+        conn = ConnectionPool(
+            "mongodb://localhost:{self.ports[1]}/?readPreference=secondaryPreferred"
+        )
         try:
             empty = yield conn.db.coll.find(flags=QUERY_SLAVE_OK)
             self.assertEqual(empty, [])
