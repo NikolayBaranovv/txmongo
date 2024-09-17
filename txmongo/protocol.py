@@ -15,6 +15,10 @@ decoding as well as Exception types, when applicable.
 
 import base64
 import hashlib
+
+from bson import BSON, SON, Binary
+from collections import namedtuple
+from hashlib import sha1
 import hmac
 import logging
 import struct
@@ -25,11 +29,19 @@ from random import SystemRandom
 from bson import BSON, SON, Binary
 from pymongo import auth
 from pymongo.errors import AutoReconnect, ConnectionFailure, DuplicateKeyError, OperationFailure, \
-    NotPrimaryError, CursorNotFound
+    CursorNotFound
+from random import SystemRandom
+import struct
 from twisted.internet import defer, protocol, error
 from twisted.python import failure, log
 
 from txmongo.utils import get_err
+
+try:
+    from pymongo.errors import NotPrimaryError
+except ImportError:
+    # For pymongo < 3.12
+    from pymongo.errors import NotMasterError as NotPrimaryError
 
 try:
     from hashlib import pbkdf2_hmac as _hi
