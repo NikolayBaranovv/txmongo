@@ -2,8 +2,6 @@
 # Use of this source code is governed by the Apache License that can be
 # found in the LICENSE file.
 
-from __future__ import absolute_import, division
-
 import warnings
 
 from bson.codec_options import DEFAULT_CODEC_OPTIONS
@@ -240,7 +238,7 @@ class _Connection(ReconnectingClientFactory):
             return defer.succeed(None)
 
 
-class ConnectionPool(object):
+class ConnectionPool:
     __index = 0
     __pool = None
     __pool_size = None

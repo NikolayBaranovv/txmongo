@@ -1,7 +1,7 @@
 from pymongo.errors import (DuplicateKeyError, WriteError, WTimeoutError, WriteConcernError, OperationFailure,
                             NotPrimaryError, ExecutionTimeout, CursorNotFound)
 from pymongo.message import _INSERT, _DELETE, _UPDATE
-from six import itervalues
+
 
 _UOP = u"op"
 
@@ -128,7 +128,7 @@ def _check_command_response(response, msg=None, allowable_errors=None,
         # Mongos returns the error details in a 'raw' object
         # for some errors.
         if "raw" in response:
-            for shard in itervalues(response["raw"]):
+            for shard in response["raw"].values():
                 # Grab the first non-empty raw error from a shard.
                 if shard.get("errmsg") and not shard.get("ok"):
                     details = shard
