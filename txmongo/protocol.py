@@ -18,10 +18,15 @@ import hashlib
 import sys
 
 from bson import BSON, SON, Binary
-from collections import namedtuple
-from hashlib import sha1
 import hmac
 import logging
+import struct
+import sys
+from collections import namedtuple
+from hashlib import sha1
+from random import SystemRandom
+
+from bson import BSON, SON, Binary
 from pymongo import auth
 from pymongo.errors import AutoReconnect, ConnectionFailure, DuplicateKeyError, OperationFailure, \
     NotPrimaryError, CursorNotFound
@@ -29,6 +34,7 @@ from random import SystemRandom
 import struct
 from twisted.internet import defer, protocol, error
 from twisted.python import failure, log
+
 from txmongo.utils import get_err
 
 

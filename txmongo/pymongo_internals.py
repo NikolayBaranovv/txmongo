@@ -1,9 +1,14 @@
 from pymongo.errors import (DuplicateKeyError, WriteError, WTimeoutError, WriteConcernError, OperationFailure,
-                            NotPrimaryError, ExecutionTimeout, CursorNotFound)
+                            ExecutionTimeout, CursorNotFound)
 from pymongo.message import _INSERT, _DELETE, _UPDATE
 
+try:
+    from pymongo.errors import NotPrimaryError
+except ImportError:
+    # For pymongo < 3.12
+    from pymongo.errors import NotMasterError as NotPrimaryError
 
-_UOP = u"op"
+
 
 # Copied from pymongo/helpers.py:32 at commit d7d94b2776098dba32686ddf3ada1f201172daaf
 
@@ -100,7 +105,7 @@ def _merge_command(run, full_result, results):
                 idx = doc["index"] + offset
                 replacement["index"] = run.index(idx)
                 # Add the failed operation to the error document.
-                replacement[_UOP] = run.ops[idx]
+                replacement["op"] = run.ops[idx]
                 full_result["writeErrors"].append(replacement)
 
         wc_error = result.get("writeConcernError")
