@@ -62,7 +62,7 @@ class MongodProcess(ProcessProtocol, metaclass=ABCMeta):
 
     @defer.inlineCallbacks
     def start(self):
-        d = defer.Deferred().addTimeout(10, reactor)
+        d = defer.Deferred()
         self._notify_waiting.append(d)
 
         args = yield defer.maybeDeferred(self.get_run_command)
