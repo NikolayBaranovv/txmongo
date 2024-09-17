@@ -1,6 +1,15 @@
 Changelog
 =========
 
+Release 24.0.0 (2024-09-16)
+---------------------------
+
+API Changes
+^^^^^^^^
+
+- This is the last release that supports Python <3.8 and MongoDB <4.0
+
+
 Release 23.0.0 (2023-01-29)
 ---------------------------
 
