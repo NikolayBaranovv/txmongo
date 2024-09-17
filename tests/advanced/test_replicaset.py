@@ -20,10 +20,10 @@ from pymongo.errors import OperationFailure, AutoReconnect, ConfigurationError
 from time import time
 from twisted.trial import unittest
 from twisted.internet import defer, reactor
-from txmongo.connection import MongoConnection, ConnectionPool
+from txmongo.connection import ConnectionPool
 from txmongo.errors import TimeExceeded
 from txmongo.protocol import QUERY_SLAVE_OK, MongoProtocol
-from tests.mongod import LocalMongod, create_mongod
+from tests.mongod import create_mongod
 
 
 class TestReplicaSet(unittest.TestCase):
@@ -88,14 +88,38 @@ class TestReplicaSet(unittest.TestCase):
         yield conn.admin.command("ismaster", check=False)
         yield conn.disconnect()
 
+    @property
+    def master_uri(self) -> str:
+        return f"mongodb://localhost:{self.ports[0]}"
+
+    @property
+    def master_uri_with_secondary(self) -> str:
+        return f"{self.master_uri}/?readPreference=secondaryPreferred"
+
+    @property
+    def master_with_guaranteed_write(self) -> str:
+        """
+        success write, when every node wrote data
+        """
+        return f"{self.master_uri}/?w={len(self.ports)}"
+
+    @property
+    def secondary_first_schema(self) -> str:
+        """
+            for docker need schema because in rs_config we have internal ports,
+            but python process would connect to external.
+        """
+        return (f"mongodb://localhost:{self.ports[1]},"
+                f"localhost:{self.ports[0]},"
+                f"localhost:{self.ports[2]}")
+
     @defer.inlineCallbacks
     def setUp(self):
         self.__mongod = [create_mongod(port=p, replset=self.rsname) for p in self.ports]
         yield defer.gatherResults([mongo.start() for mongo in self.__mongod])
 
         yield defer.gatherResults([self.__check_reachable(port) for port in self.ports])
-        master_uri = f"mongodb://localhost:{self.ports[0]}/?readPreference=secondaryPreferred"
-        master = ConnectionPool(master_uri)
+        master = ConnectionPool(self.master_uri_with_secondary)
         yield master.admin.command("replSetInitiate", self.rsconfig)
 
         ready = False
@@ -131,7 +155,7 @@ class TestReplicaSet(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_WriteToMaster(self):
-        conn = MongoConnection("localhost", self.ports[0])
+        conn = ConnectionPool(self.master_uri)
         try:
             coll = conn.db.coll
             yield coll.insert({'x': 42}, safe=True)
@@ -142,8 +166,7 @@ class TestReplicaSet(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_SlaveOk(self):
-        uri = "mongodb://localhost:{0}/?readPreference=secondaryPreferred".format(self.ports[1])
-        conn = ConnectionPool(uri)
+        conn = ConnectionPool(self.master_uri_with_secondary)
         try:
             empty = yield conn.db.coll.find(flags=QUERY_SLAVE_OK)
             self.assertEqual(empty, [])
@@ -160,11 +183,7 @@ class TestReplicaSet(unittest.TestCase):
     def test_SwitchToMasterOnConnect(self):
         # Reverse hosts order
         try:
-            # need schema because in rs_config we have internal ports,
-            # but python process would connect to external
-            conn = ConnectionPool(f"mongodb://localhost:{self.ports[1]},"
-                                  f"localhost:{self.ports[0]},"
-                                  f"localhost:{self.ports[2]}")
+            conn = ConnectionPool(self.secondary_first_schema)
             result = yield conn.db.coll.find({'x': 42})
             self.assertEqual(result, [])
         finally:
@@ -176,8 +195,7 @@ class TestReplicaSet(unittest.TestCase):
     @defer.inlineCallbacks
     def test_AutoReconnect(self):
         try:
-            uri = "mongodb://localhost:{0}/?w={1}".format(self.ports[0], len(self.ports))
-            conn = ConnectionPool(uri, max_delay=5)
+            conn = ConnectionPool(self.master_with_guaranteed_write, max_delay=5)
 
             yield conn.db.coll.insert({'x': 42}, safe=True)
 
@@ -198,8 +216,7 @@ class TestReplicaSet(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_AutoReconnect_from_primary_step_down(self):
-        uri = "mongodb://localhost:{0}/?w={1}".format(self.ports[0], len(self.ports))
-        conn = ConnectionPool(uri, max_delay=5)
+        conn = ConnectionPool(self.master_with_guaranteed_write, max_delay=5)
 
         # this will force primary to step down, triggering an AutoReconnect that bubbles up
         # through the connection pool to the client
@@ -211,8 +228,7 @@ class TestReplicaSet(unittest.TestCase):
     @defer.inlineCallbacks
     def test_find_with_timeout(self):
         try:
-            uri = "mongodb://localhost:{0}/?w={1}".format(self.ports[0], len(self.ports))
-            conn = ConnectionPool(uri, retry_delay=3, max_delay=5)
+            conn = ConnectionPool(self.master_with_guaranteed_write, retry_delay=3, max_delay=5)
 
             yield conn.db.coll.insert({'x': 42}, safe=True)
 
@@ -235,8 +251,7 @@ class TestReplicaSet(unittest.TestCase):
     @defer.inlineCallbacks
     def test_find_with_deadline(self):
         try:
-            uri = "mongodb://localhost:{0}/?w={1}".format(self.ports[0], len(self.ports))
-            conn = ConnectionPool(uri, retry_delay=3, max_delay=5)
+            conn = ConnectionPool(self.master_with_guaranteed_write, retry_delay=3, max_delay=5)
 
             yield conn.db.coll.insert({'x': 42}, safe=True)
 
@@ -259,8 +274,7 @@ class TestReplicaSet(unittest.TestCase):
     @defer.inlineCallbacks
     def test_TimeExceeded_insert(self):
         try:
-            uri = "mongodb://localhost:{0}/?w={1}".format(self.ports[0], len(self.ports))
-            conn = ConnectionPool(uri, retry_delay=3, max_delay=5)
+            conn = ConnectionPool(self.master_with_guaranteed_write, retry_delay=3, max_delay=5)
 
             yield conn.db.coll.insert({'x': 42}, safe=True)
 
@@ -282,8 +296,6 @@ class TestReplicaSet(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_InvalidRSName(self):
-        uri = "mongodb://localhost:{0}/?replicaSet={1}_X".format(self.ports[0], self.rsname)
-
         ok = defer.Deferred()
 
         def proto_fail(self, exception):
@@ -296,7 +308,7 @@ class TestReplicaSet(unittest.TestCase):
 
         self.patch(MongoProtocol, "fail", proto_fail)
 
-        conn = ConnectionPool(uri)
+        conn = ConnectionPool(self.master_uri + f"/?replicaSet={self.rsname}_X")
 
         @defer.inlineCallbacks
         def do_query():
@@ -310,12 +322,7 @@ class TestReplicaSet(unittest.TestCase):
 
     @defer.inlineCallbacks
     def test_StaleConnection(self):
-        # conn = MongoConnection("localhost", self.ports[0], ping_interval = 5, ping_timeout = 5)
-        conn = ConnectionPool(f"mongodb://localhost:{self.ports[1]},"
-                              f"localhost:{self.ports[0]},"
-                              f"localhost:{self.ports[2]}",
-                              ping_interval=5, ping_timeout=5
-                              )
+        conn = ConnectionPool(self.secondary_first_schema, ping_interval=5, ping_timeout=5,)
         try:
             yield conn.db.coll.count()
             # check that 5s pingers won't break connection if it is healthy
