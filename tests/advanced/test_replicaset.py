@@ -250,6 +250,7 @@ class TestReplicaSet(unittest.TestCase):
             yield conn.db.coll.insert({"x": 42}, safe=True)
 
             yield self.__mongod[0].kill(signal.SIGSTOP)
+            yield self.__sleep(0.2)
 
             while True:
                 try:
@@ -275,6 +276,7 @@ class TestReplicaSet(unittest.TestCase):
             yield conn.db.coll.insert({"x": 42}, safe=True)
 
             yield self.__mongod[0].kill(signal.SIGSTOP)
+            yield self.__sleep(0.2)
 
             while True:
                 try:
