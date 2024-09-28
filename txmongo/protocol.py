@@ -404,6 +404,10 @@ class Msg:
         #        Maybe we should refactor other messages too. Or get rid of MsgHeader dataclass.
         return self.header.opcode
 
+    @classmethod
+    def create_flag_bits(cls, not_more_to_come: bool ) -> int:
+        return 0 if not_more_to_come else OP_MSG_MORE_TO_COME
+
     def size_in_bytes(self) -> int:
         """return estimated overll message length including messageLength and requestID"""
         # checksum is not added since we don't support it for now

@@ -750,7 +750,7 @@ class Collection:
         inserted_id = document["_id"]
 
         msg = Msg(
-            flag_bits=0 if self.write_concern.acknowledged else OP_MSG_MORE_TO_COME,
+            flag_bits=Msg.create_flag_bits(self.write_concern.acknowledged),
             body=bson.encode(
                 {
                     "insert": self._collection_name,
@@ -887,7 +887,7 @@ class Collection:
             max_message_size: int,
         ) -> Iterator[Tuple[int, Msg]]:
             msg = Msg(
-                flag_bits=0 if write_concern.acknowledged else OP_MSG_MORE_TO_COME,
+                flag_bits=Msg.create_flag_bits(write_concern.acknowledged),
                 body=bson.encode(
                     {
                         "insert": self._collection_name,
@@ -1067,7 +1067,7 @@ class Collection:
         validate_boolean("upsert", upsert)
 
         msg = Msg(
-            flag_bits=0 if self.write_concern.acknowledged else OP_MSG_MORE_TO_COME,
+            flag_bits=Msg.create_flag_bits(self.write_concern.acknowledged),
             body=bson.encode(
                 {
                     "update": self._collection_name,
@@ -1238,49 +1238,67 @@ class Collection:
 
         return self._database.connection.getprotocol().addCallback(on_proto)
 
-    def _delete(self, filter, multi, _deadline):
+    @defer.inlineCallbacks
+    def _delete(
+        self, filter: dict, let: Optional[dict], multi: bool, _deadline: Optional[float]
+    ):
         validate_is_mapping("filter", filter)
 
-        if self.write_concern.acknowledged:
-            deletes = [SON([("q", filter), ("limit", 0 if multi else 1)])]
-            command = SON(
-                [
-                    ("delete", self._collection_name),
-                    ("deletes", deletes),
-                    ("writeConcern", self.write_concern.document),
-                ]
-            )
+        payload = {
+            "deletes": [
+                bson.encode(
+                    {
+                        "q": filter,
+                        "limit": 0 if multi else 1,
+                    },
+                    codec_options=self.codec_options,
+                )
+            ],
+        }
 
-            def on_ok(raw_response):
-                _check_write_command_response(raw_response)
-                return raw_response
+        if let:
+            validate_is_mapping("let", let)
+            payload["let"] = bson.encode(let, codec_options=self.codec_options)
 
-            return self._database.command(command, _deadline=_deadline).addCallback(
-                on_ok
-            )
+        msg = Msg(
+            flag_bits=Msg.create_flag_bits(self.write_concern.acknowledged),
+            body=bson.encode(
+                {
+                    "delete": self._collection_name,
+                    "$db": str(self.database),
+                    "writeConcern": self.write_concern.document,
+                }
+            ),
+            payload=payload,
+        )
 
-        else:
-            return self.remove(
-                filter, single=not multi, _deadline=_deadline
-            ).addCallback(lambda _: None)
+        proto = yield self._database.connection.getprotocol()
+        check_deadline(_deadline)
+        response = yield proto.send_MSG(msg)
+        if response:
+            _check_write_command_response(response)
+
+        return DeleteResult(response, self.write_concern.acknowledged)
 
     @timeout
-    def delete_one(self, filter, _deadline=None):
+    def delete_one(
+        self,
+        filter: dict,
+        let: Optional[dict] = None,
+        _deadline: Optional[float] = None,
+    ) -> Deferred[DeleteResult]:
         """delete_one(filter)"""
-
-        def on_ok(raw_response):
-            return DeleteResult(raw_response, self.write_concern.acknowledged)
-
-        return self._delete(filter, False, _deadline).addCallback(on_ok)
+        return self._delete(filter, let=let, multi=False, _deadline=_deadline)
 
     @timeout
-    def delete_many(self, filter, _deadline=None):
+    def delete_many(
+        self,
+        filter: dict,
+        let: Optional[dict] = None,
+        _deadline: Optional[float] = None,
+    ) -> Deferred[DeleteResult]:
         """delete_many(filter)"""
-
-        def on_ok(raw_response):
-            return DeleteResult(raw_response, self.write_concern.acknowledged)
-
-        return self._delete(filter, True, _deadline).addCallback(on_ok)
+        return self._delete(filter, let=let, multi=True, _deadline=_deadline)
 
     @timeout
     def drop(self, _deadline=None):
