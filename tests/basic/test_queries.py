@@ -992,6 +992,32 @@ class TestDeleteMany(SingleCollectionTest):
     def test_Failures(self):
         yield self.assertFailure(self.coll.delete_many({"x": {"$": 1}}), WriteError)
 
+    @defer.inlineCallbacks
+    def test_Let(self):
+        server_status = yield self.conn.admin.command("serverStatus")
+        version = [int(part) for part in server_status["version"].split(".")]
+        if version < [5, 0]:
+            raise unittest.SkipTest("`let` start supported by MongoDB >= 5.0")
+
+        # already have two documents with x: 1
+        yield self.coll.insert_many(
+            [
+                {"_id": 1, "flavor": "chocolate"},
+                {"_id": 2, "flavor": "strawberry"},
+                {"_id": 3, "flavor": "cherry"},
+                {"_id": 4, "flavor": "strawberry"},
+            ]
+        )
+        result = yield self.coll.delete_many(
+            filter={"$expr": {"$eq": ["$flavor", "$$targetFlavor"]}},
+            let={"targetFlavor": "strawberry"},
+        )
+        self.assertTrue(isinstance(result, DeleteResult))
+        self.assertEqual(result.deleted_count, 2)
+
+        cnt = yield self.coll.count()
+        self.assertEqual(cnt, 4)
+
 
 class TestFindOneAndDelete(SingleCollectionTest):
 

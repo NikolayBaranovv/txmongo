@@ -237,6 +237,13 @@ class TestIndexInfo(unittest.TestCase):
         db = self.db
         coll = self.coll
 
+        server_status = yield self.conn.admin.command("serverStatus")
+        version = [int(part) for part in server_status["version"].split(".")]
+        if version > [4, 9]:
+            raise unittest.SkipTest(
+                "`GeoHaystack` indexes cannot be created in version >= 4.9"
+            )
+
         _id = yield coll.insert(
             {"pos": {"long": 34.2, "lat": 33.3}, "type": "restaurant"}
         )

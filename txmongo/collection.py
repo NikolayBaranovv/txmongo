@@ -7,7 +7,7 @@ import io
 import struct
 import warnings
 from operator import itemgetter
-from typing import Iterable, List, Iterator, Mapping, Optional, Tuple
+from typing import Iterable, Iterator, List, Mapping, Optional, Tuple
 
 import bson
 from bson import BSON, ObjectId
@@ -38,23 +38,23 @@ from pymongo.results import (
 )
 from pymongo.write_concern import WriteConcern
 from twisted.internet import defer
-from twisted.internet.defer import Deferred, gatherResults, FirstError
+from twisted.internet.defer import Deferred, FirstError, gatherResults
 from twisted.python.compat import comparable
 
 from txmongo import filter as qf
 from txmongo.filter import _QueryFilter
 from txmongo.protocol import (
     DELETE_SINGLE_REMOVE,
+    OP_MSG_MORE_TO_COME,
     UPDATE_MULTI,
     UPDATE_UPSERT,
     Delete,
     Getmore,
     Insert,
     KillCursors,
+    Msg,
     Query,
     Update,
-    Msg,
-    OP_MSG_MORE_TO_COME,
 )
 from txmongo.pymongo_internals import (
     _check_command_response,
@@ -1244,32 +1244,30 @@ class Collection:
     ):
         validate_is_mapping("filter", filter)
 
-        payload = {
-            "deletes": [
-                bson.encode(
-                    {
-                        "q": filter,
-                        "limit": 0 if multi else 1,
-                    },
-                    codec_options=self.codec_options,
-                )
-            ],
+        body = {
+            "delete": self._collection_name,
+            "$db": str(self.database),
+            "writeConcern": self.write_concern.document,
         }
 
         if let:
             validate_is_mapping("let", let)
-            payload["let"] = bson.encode(let, codec_options=self.codec_options)
+            body["let"] = let
 
         msg = Msg(
             flag_bits=Msg.create_flag_bits(self.write_concern.acknowledged),
-            body=bson.encode(
-                {
-                    "delete": self._collection_name,
-                    "$db": str(self.database),
-                    "writeConcern": self.write_concern.document,
-                }
-            ),
-            payload=payload,
+            body=bson.encode(body),
+            payload={
+                "deletes": [
+                    bson.encode(
+                        {
+                            "q": filter,
+                            "limit": 0 if multi else 1,
+                        },
+                        codec_options=self.codec_options,
+                    )
+                ],
+            },
         )
 
         proto = yield self._database.connection.getprotocol()
