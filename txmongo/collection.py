@@ -1085,7 +1085,7 @@ class Collection:
         _deadline: Optional[float] = None,
     ) -> Deferred[DeleteResult]:
         """delete_one(filter)"""
-        return self._delete(filter, let=let, multi=False, _deadline=_deadline)
+        return self._delete(filter, let, multi=False, _deadline=_deadline)
 
     @timeout
     def delete_many(
@@ -1095,7 +1095,7 @@ class Collection:
         _deadline: Optional[float] = None,
     ) -> Deferred[DeleteResult]:
         """delete_many(filter)"""
-        return self._delete(filter, let=let, multi=True, _deadline=_deadline)
+        return self._delete(filter, let, multi=True, _deadline=_deadline)
 
     @timeout
     def drop(self, _deadline=None):
