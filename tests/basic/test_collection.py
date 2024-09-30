@@ -24,6 +24,7 @@ from twisted.internet import defer
 from twisted.trial import unittest
 
 import txmongo
+from tests.basic.utils import skip_for_mongodb_newer_than
 from txmongo import filter as qf
 from txmongo.collection import Collection
 
@@ -232,17 +233,12 @@ class TestIndexInfo(unittest.TestCase):
         self.assertEqual(index_info[ix]["key"], {"_fts": "text", "_ftsx": 1})
         self.assertEqual(index_info[ix]["weights"], {"title": 100, "summary": 20})
 
+    @skip_for_mongodb_newer_than(
+        [4, 9], "`GeoHaystack` indexes cannot be created in version >= 4.9"
+    )
     @defer.inlineCallbacks
     def test_index_haystack(self):
-        db = self.db
         coll = self.coll
-
-        server_status = yield self.conn.admin.command("serverStatus")
-        version = [int(part) for part in server_status["version"].split(".")]
-        if version > [4, 9]:
-            raise unittest.SkipTest(
-                "`GeoHaystack` indexes cannot be created in version >= 4.9"
-            )
 
         _id = yield coll.insert(
             {"pos": {"long": 34.2, "lat": 33.3}, "type": "restaurant"}
@@ -254,7 +250,7 @@ class TestIndexInfo(unittest.TestCase):
             qf.sort(qf.GEOHAYSTACK("pos") + qf.ASCENDING("type")), **{"bucket_size": 1}
         )
 
-        results = yield db.command(
+        results = yield self.db.command(
             "geoSearch",
             "mycol",
             near=[33, 33],

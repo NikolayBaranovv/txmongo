@@ -30,9 +30,9 @@ from pymongo.results import (
 )
 from pymongo.write_concern import WriteConcern
 from twisted.internet import defer
-from twisted.trial import unittest
 
 import txmongo.filter as qf
+from tests.basic.utils import skip_for_mongodb_newer_than, skip_for_mongodb_older_than
 from tests.utils import SingleCollectionTest
 from txmongo.protocol import MongoClientProtocol
 
@@ -154,13 +154,9 @@ class TestMongoQueries(SingleCollectionTest):
         self.assertTrue(all(x in ["_id"] for x in res[0].keys()))
         self.assertRaises(TypeError, self.coll.find, {}, fields=[1])
 
+    @skip_for_mongodb_newer_than([4, 0], "`group` is only supported by MongoDB <= 4.0")
     @defer.inlineCallbacks
     def test_group(self):
-        server_status = yield self.conn.admin.command("serverStatus")
-        version = [int(part) for part in server_status["version"].split(".")]
-        if version >= [4, 2]:
-            raise unittest.SkipTest("`group` is only supported by MongoDB <= 4.0")
-
         yield self.coll.insert([{"v": i % 2} for i in range(5)], safe=True)
         reduce_ = """
         function(curr, result) {
@@ -586,9 +582,9 @@ class TestInsertOne(SingleCollectionTest):
     @defer.inlineCallbacks
     def test_Acknowledged(self):
         result = yield self.coll.insert_one({"x": 42})
-        self.assertTrue(isinstance(result, InsertOneResult))
+        self.assertIsInstance(result, InsertOneResult)
         self.assertEqual(result.acknowledged, True)
-        self.assertTrue(isinstance(result.inserted_id, ObjectId))
+        self.assertIsInstance(result.inserted_id, ObjectId)
 
         count = yield self.coll.count()
         self.assertEqual(count, 1)
@@ -635,7 +631,7 @@ class TestInsertMany(SingleCollectionTest):
     @defer.inlineCallbacks
     def test_Acknowledged(self):
         result = yield self.coll.insert_many([{"x": 42} for _ in range(100)])
-        self.assertTrue(isinstance(result, InsertManyResult))
+        self.assertIsInstance(result, InsertManyResult)
         self.assertEqual(result.acknowledged, True)
 
         docs = yield self.coll.find()
@@ -648,7 +644,7 @@ class TestInsertMany(SingleCollectionTest):
         result = yield self.coll.with_options(
             write_concern=WriteConcern(w=0)
         ).insert_many([{"x": 42} for _ in range(100)])
-        self.assertTrue(isinstance(result, InsertManyResult))
+        self.assertIsInstance(result, InsertManyResult)
         self.assertEqual(result.acknowledged, False)
 
         docs = yield self.coll.find()
@@ -746,7 +742,7 @@ class TestUpdateOne(SingleCollectionTest):
         result = yield self.coll.update_one(
             {"x": {"$exists": True}}, {"$set": {"y": 123}}
         )
-        self.assertTrue(isinstance(result, UpdateResult))
+        self.assertIsInstance(result, UpdateResult)
         self.assertEqual(result.acknowledged, True)
         self.assertEqual(result.matched_count, 1)
         self.assertEqual(result.modified_count, 1)
@@ -756,7 +752,7 @@ class TestUpdateOne(SingleCollectionTest):
     def test_Unacknowledged(self):
         coll = self.coll.with_options(write_concern=WriteConcern(w=0))
         result = yield coll.update_one({"x": {"$exists": True}}, {"$set": {"y": 123}})
-        self.assertTrue(isinstance(result, UpdateResult))
+        self.assertIsInstance(result, UpdateResult)
         self.assertEqual(result.acknowledged, False)
 
     @defer.inlineCallbacks
@@ -764,7 +760,7 @@ class TestUpdateOne(SingleCollectionTest):
         result = yield self.coll.update_one(
             {"y": 123}, {"$set": {"z": 456}}, upsert=True
         )
-        self.assertTrue(isinstance(result.upserted_id, ObjectId))
+        self.assertIsInstance(result.upserted_id, ObjectId)
 
         doc = yield self.coll.find_one({"_id": result.upserted_id}, fields={"_id": 0})
         self.assertEqual(doc, {"y": 123, "z": 456})
@@ -809,7 +805,7 @@ class TestReplaceOne(SingleCollectionTest):
     @defer.inlineCallbacks
     def test_Acknowledged(self):
         result = yield self.coll.replace_one({"x": {"$exists": True}}, {"y": 123})
-        self.assertTrue(isinstance(result, UpdateResult))
+        self.assertIsInstance(result, UpdateResult)
         self.assertEqual(result.acknowledged, True)
         self.assertEqual(result.matched_count, 1)
         self.assertEqual(result.modified_count, 1)
@@ -819,13 +815,13 @@ class TestReplaceOne(SingleCollectionTest):
     def test_Unacknowledged(self):
         coll = self.coll.with_options(write_concern=WriteConcern(w=0))
         result = yield coll.replace_one({"x": {"$exists": True}}, {"y": 123})
-        self.assertTrue(isinstance(result, UpdateResult))
+        self.assertIsInstance(result, UpdateResult)
         self.assertEqual(result.acknowledged, False)
 
     @defer.inlineCallbacks
     def test_UpsertAcknowledged(self):
         result = yield self.coll.replace_one({"x": 5}, {"y": 123}, upsert=True)
-        self.assertTrue(isinstance(result.upserted_id, ObjectId))
+        self.assertIsInstance(result.upserted_id, ObjectId)
 
         doc = yield self.coll.find_one({"_id": result.upserted_id}, fields={"_id": 0})
         self.assertEqual(doc, {"y": 123})
@@ -869,7 +865,7 @@ class TestUpdateMany(SingleCollectionTest):
         result = yield self.coll.update_many(
             {"x": {"$exists": True}}, {"$set": {"y": 5}}
         )
-        self.assertTrue(isinstance(result, UpdateResult))
+        self.assertIsInstance(result, UpdateResult)
         self.assertEqual(result.acknowledged, True)
         self.assertEqual(result.matched_count, 2)
         self.assertEqual(result.modified_count, 2)
@@ -882,7 +878,7 @@ class TestUpdateMany(SingleCollectionTest):
     def test_Unacknowledged(self):
         coll = self.coll.with_options(write_concern=WriteConcern(w=0))
         result = yield coll.update_many({"x": {"$exists": True}}, {"$set": {"y": 5}})
-        self.assertTrue(isinstance(result, UpdateResult))
+        self.assertIsInstance(result, UpdateResult)
         self.assertEqual(result.acknowledged, False)
 
         cnt = yield self.coll.count({"y": 5})
@@ -894,7 +890,7 @@ class TestUpdateMany(SingleCollectionTest):
         self.assertEqual(result.acknowledged, True)
         self.assertEqual(result.matched_count, 0)
         self.assertEqual(result.modified_count, 0)
-        self.assertTrue(isinstance(result.upserted_id, ObjectId))
+        self.assertIsInstance(result.upserted_id, ObjectId)
 
         cnt = yield self.coll.count()
         self.assertEqual(cnt, 3)
@@ -932,14 +928,10 @@ class TestUpdateMany(SingleCollectionTest):
 class TestDeleteOne(SingleCollectionTest):
 
     @defer.inlineCallbacks
-    def setUp(self):
-        yield super().setUp()
-        yield self.coll.insert_many([{"x": 1}, {"x": 1}])
-
-    @defer.inlineCallbacks
     def test_Acknowledged(self):
+        yield self.coll.insert_many([{"x": 1}, {"x": 1}])
         result = yield self.coll.delete_one({"x": 1})
-        self.assertTrue(isinstance(result, DeleteResult))
+        self.assertIsInstance(result, DeleteResult)
         self.assertEqual(result.acknowledged, True)
         self.assertEqual(result.deleted_count, 1)
 
@@ -948,9 +940,10 @@ class TestDeleteOne(SingleCollectionTest):
 
     @defer.inlineCallbacks
     def test_Unacknowledged(self):
+        yield self.coll.insert_many([{"x": 1}, {"x": 1}])
         coll = self.coll.with_options(write_concern=WriteConcern(w=0))
         result = yield coll.delete_one({"x": 1})
-        self.assertTrue(isinstance(result, DeleteResult))
+        self.assertIsInstance(result, DeleteResult)
         self.assertEqual(result.acknowledged, False)
 
         cnt = yield self.coll.count()
@@ -958,20 +951,38 @@ class TestDeleteOne(SingleCollectionTest):
 
     @defer.inlineCallbacks
     def test_Failures(self):
+        yield self.coll.insert_many([{"x": 1}, {"x": 1}])
         yield self.assertFailure(self.coll.delete_one({"x": {"$": 1}}), WriteError)
+
+    @skip_for_mongodb_older_than([5, 0], "`let` is only supported by MongoDB >= 5.0")
+    @defer.inlineCallbacks
+    def test_Let(self):
+        yield self.coll.insert_many(
+            [
+                {"_id": 1, "flavor": "chocolate"},
+                {"_id": 2, "flavor": "strawberry"},
+                {"_id": 3, "flavor": "cherry"},
+                {"_id": 4, "flavor": "strawberry"},
+            ]
+        )
+        result = yield self.coll.delete_one(
+            filter={"$expr": {"$eq": ["$flavor", "$$targetFlavor"]}},
+            let={"targetFlavor": "strawberry"},
+        )
+        self.assertIsInstance(result, DeleteResult)
+        self.assertEqual(result.deleted_count, 1)
+
+        cnt = yield self.coll.count()
+        self.assertEqual(cnt, 3)
 
 
 class TestDeleteMany(SingleCollectionTest):
 
     @defer.inlineCallbacks
-    def setUp(self):
-        yield super().setUp()
-        yield self.coll.insert_many([{"x": 1}, {"x": 1}])
-
-    @defer.inlineCallbacks
     def test_Acknowledged(self):
+        yield self.coll.insert_many([{"x": 1}, {"x": 1}])
         result = yield self.coll.delete_many({"x": 1})
-        self.assertTrue(isinstance(result, DeleteResult))
+        self.assertIsInstance(result, DeleteResult)
         self.assertEqual(result.acknowledged, True)
         self.assertEqual(result.deleted_count, 2)
 
@@ -980,9 +991,10 @@ class TestDeleteMany(SingleCollectionTest):
 
     @defer.inlineCallbacks
     def test_Unacknowledged(self):
+        yield self.coll.insert_many([{"x": 1}, {"x": 1}])
         coll = self.coll.with_options(write_concern=WriteConcern(w=0))
         result = yield coll.delete_many({"x": 1})
-        self.assertTrue(isinstance(result, DeleteResult))
+        self.assertIsInstance(result, DeleteResult)
         self.assertEqual(result.acknowledged, False)
 
         cnt = yield self.coll.count()
@@ -990,16 +1002,12 @@ class TestDeleteMany(SingleCollectionTest):
 
     @defer.inlineCallbacks
     def test_Failures(self):
+        yield self.coll.insert_many([{"x": 1}, {"x": 1}])
         yield self.assertFailure(self.coll.delete_many({"x": {"$": 1}}), WriteError)
 
+    @skip_for_mongodb_older_than([5, 0], "`let` is only supported by MongoDB >= 5.0")
     @defer.inlineCallbacks
     def test_Let(self):
-        server_status = yield self.conn.admin.command("serverStatus")
-        version = [int(part) for part in server_status["version"].split(".")]
-        if version < [5, 0]:
-            raise unittest.SkipTest("`let` start supported by MongoDB >= 5.0")
-
-        # already have two documents with x: 1
         yield self.coll.insert_many(
             [
                 {"_id": 1, "flavor": "chocolate"},
@@ -1012,11 +1020,11 @@ class TestDeleteMany(SingleCollectionTest):
             filter={"$expr": {"$eq": ["$flavor", "$$targetFlavor"]}},
             let={"targetFlavor": "strawberry"},
         )
-        self.assertTrue(isinstance(result, DeleteResult))
+        self.assertIsInstance(result, DeleteResult)
         self.assertEqual(result.deleted_count, 2)
 
         cnt = yield self.coll.count()
-        self.assertEqual(cnt, 4)
+        self.assertEqual(cnt, 2)
 
 
 class TestFindOneAndDelete(SingleCollectionTest):

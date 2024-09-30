@@ -5,7 +5,7 @@
 import collections.abc
 import warnings
 from operator import itemgetter
-from typing import Iterable, Iterator, List, Optional, Tuple
+from typing import Iterable, List, Optional
 
 import bson
 from bson import BSON, ObjectId
@@ -43,7 +43,6 @@ from txmongo._bulk import _INSERT, _Bulk, _Run
 from txmongo.filter import _QueryFilter
 from txmongo.protocol import (
     DELETE_SINGLE_REMOVE,
-    OP_MSG_MORE_TO_COME,
     UPDATE_MULTI,
     UPDATE_UPSERT,
     Delete,

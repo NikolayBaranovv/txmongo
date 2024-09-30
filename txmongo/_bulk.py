@@ -1,4 +1,4 @@
-from typing import Any, Iterator, List, MutableMapping, Tuple, Union
+from typing import Any, Iterator, List, Tuple, Union
 
 import bson
 from bson import CodecOptions, ObjectId
@@ -18,7 +18,7 @@ from pymongo.common import (
     validate_ok_for_update,
 )
 
-from txmongo.protocol import OP_MSG_MORE_TO_COME, MongoProtocol, Msg
+from txmongo.protocol import MongoProtocol, Msg
 from txmongo.types import Document
 
 _WriteOp = Union[InsertOne, UpdateOne, UpdateMany, ReplaceOne, DeleteOne, DeleteMany]
