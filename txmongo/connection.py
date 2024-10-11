@@ -15,7 +15,7 @@ from twisted.internet.protocol import ClientFactory, ReconnectingClientFactory
 from twisted.python import log
 
 from txmongo.database import Database
-from txmongo.protocol import MongoProtocol, Query
+from txmongo.protocol import MongoProtocol
 from txmongo.utils import get_err, timeout
 
 DEFAULT_MAX_BSON_SIZE = 16777216
@@ -77,9 +77,8 @@ class _Connection(ReconnectingClientFactory):
 
     @staticmethod
     @timeout
-    def __send_ismaster(proto, **kwargs):
-        query = Query(collection="admin.$cmd", query={"ismaster": 1})
-        return proto.send_QUERY(query)
+    def __send_ismaster(proto, _deadline):
+        return proto.send_op_query_command("admin", {"ismaster": 1})
 
     @defer.inlineCallbacks
     def configure(self, proto: MongoProtocol):
@@ -91,19 +90,11 @@ class _Connection(ReconnectingClientFactory):
         """
 
         if not proto:
-            defer.returnValue(None)
-
-        reply = yield self.__send_ismaster(proto, timeout=self.initialDelay)
+            return None
 
         # Handle the reply from the "ismaster" query. The reply contains
         # configuration information about the peer.
-
-        # Make sure we got a result document.
-        if len(reply.documents) != 1:
-            raise OperationFailure("TxMongo: invalid document length.")
-
-        # Get the configuration document from the reply.
-        config = reply.documents[0].decode()
+        config = yield self.__send_ismaster(proto, timeout=self.initialDelay)
 
         # Make sure the command was successful.
         if not config.get("ok"):
@@ -134,10 +125,8 @@ class _Connection(ReconnectingClientFactory):
 
         # MongoDB < 4.0
         if proto.max_wire_version < 7:
-            warnings.warn(
-                "MongoDB <4.0 support will be dropped in the next version of TxMongo",
-                DeprecationWarning,
-            )
+            warnings.warn("TxMongo: MongoDB version <4.0 is not supported")
+            raise ConfigurationError("TxMongo: MongoDB version <4.0 is not supported")
 
         # Track the other hosts in the replica set.
         hosts = config.get("hosts")
@@ -274,7 +263,7 @@ class ConnectionPool:
         ssl_context_factory=None,
         ping_interval=10,
         ping_timeout=10,
-        **kwargs
+        **kwargs,
     ):
         assert isinstance(uri, str)
         assert isinstance(pool_size, int)
@@ -285,8 +274,7 @@ class ConnectionPool:
 
         self.__uri = parse_uri(uri)
 
-        wc_options = dict(self.__uri["options"])
-        wc_options.update(kwargs)
+        wc_options = {**self.__uri["options"], **kwargs}
         self.__write_concern = self.__parse_write_concern_options(wc_options)
 
         self.__codec_options = kwargs.get(
@@ -514,9 +502,9 @@ class _PingerProtocol(MongoProtocol):
 
         timeout_call = reactor.callLater(self.timeout, on_timeout)
 
-        self.send_QUERY(
-            Query(collection="admin.$cmd", query={"ismaster": 1})
-        ).addCallbacks(on_ok, on_fail)
+        self.send_op_query_command("admin", {"ismaster": 1}).addCallbacks(
+            on_ok, on_fail
+        )
 
     def connectionMade(self):
         MongoProtocol.connectionMade(self)

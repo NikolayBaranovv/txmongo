@@ -1,21 +1,15 @@
 from unittest.mock import patch
 
-from bson import BSON
+import bson
 from pymongo import InsertOne
-from pymongo.errors import BulkWriteError, OperationFailure
+from pymongo.errors import BulkWriteError, NotPrimaryError, OperationFailure
 from pymongo.operations import DeleteOne, ReplaceOne, UpdateMany, UpdateOne
 from pymongo.results import BulkWriteResult
 from pymongo.write_concern import WriteConcern
 from twisted.internet import defer
 
 from tests.utils import SingleCollectionTest
-from txmongo.protocol import Reply
-
-try:
-    from pymongo.errors import NotPrimaryError
-except ImportError:
-    # For pymongo < 3.12
-    from pymongo.errors import NotMasterError as NotPrimaryError
+from txmongo.protocol import Msg, Reply
 
 
 class TestArgsValidation(SingleCollectionTest):
@@ -189,7 +183,7 @@ class TestBulkUpdate(SingleCollectionTest):
             ]
         )
 
-        docs = yield self.coll.find(fields={"_id": 0})
+        docs = yield self.coll.find(projection={"_id": 0})
         self.assertEqual(len(docs), 4)
         self.assertIn({"x": 43, "m": 1}, docs)
         self.assertIn({"y": 122, "a": "hi", "m": 1}, docs)
@@ -212,7 +206,7 @@ class TestBulkUpdate(SingleCollectionTest):
             ]
         )
 
-        docs = yield self.coll.find(fields={"_id": 0})
+        docs = yield self.coll.find(projection={"_id": 0})
         self.assertEqual(len(docs), 4)
         self.assertIn({"j": 5}, docs)
         self.assertIn({"y": 123}, docs)
@@ -263,7 +257,7 @@ class TestHuge(SingleCollectionTest):
         self.assertEqual((yield self.coll.count()), 5)
 
         docs = yield self.coll.find()
-        total_size = sum(len(BSON.encode(doc)) for doc in docs)
+        total_size = sum(len(bson.encode(doc)) for doc in docs)
         self.assertGreater(total_size, 40 * 1024**2)
 
 
@@ -275,16 +269,20 @@ class TestOperationFailure(SingleCollectionTest):
 
         def fake_send_query(*args):
             return defer.succeed(
-                {
-                    "ok": 0.0,
-                    "errmsg": "operation was interrupted",
-                    "code": 11602,
-                    "codeName": "InterruptedDueToReplStateChange",
-                }
+                Msg(
+                    body=bson.encode(
+                        {
+                            "ok": 0.0,
+                            "errmsg": "operation was interrupted",
+                            "code": 11602,
+                            "codeName": "InterruptedDueToReplStateChange",
+                        }
+                    )
+                )
             )
 
         with patch(
-            "txmongo.protocol.MongoProtocol.send_MSG", side_effect=fake_send_query
+            "txmongo.protocol.MongoProtocol.send_msg", side_effect=fake_send_query
         ):
             yield self.assertFailure(
                 self.coll.bulk_write(

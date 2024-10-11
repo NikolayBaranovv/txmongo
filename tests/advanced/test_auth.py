@@ -23,6 +23,7 @@ from twisted.internet import defer, ssl
 from twisted.internet.defer import TimeoutError
 from twisted.trial import unittest
 
+from tests.basic.utils import only_for_mongodb_older_than
 from tests.conf import MongoConf
 from tests.mongod import create_mongod
 from txmongo import connection
@@ -99,16 +100,21 @@ class TestMongoAuth(unittest.TestCase, MongoAuth):
     @defer.inlineCallbacks
     def clean(self):
         try:
+            for login, password, db in [
+                (self.login1, self.password1, self.db1),
+                (self.login2, self.password2, self.db2),
+            ]:
+                conn = self.__get_connection()
+                yield conn[db].authenticate(login, password)
+                yield conn[db][self.coll].drop()
+                yield conn.disconnect()
+
             conn = self.__get_connection()
             yield conn["admin"].authenticate(self.ua_login, self.ua_password)
-            yield conn[self.db1].authenticate(self.login1, self.password1)
-            yield conn[self.db2].authenticate(self.login2, self.password2)
-
-            yield conn[self.db1][self.coll].drop()
-            yield conn[self.db2][self.coll].drop()
             yield conn[self.db1].command("dropUser", self.login1)
             yield conn[self.db2].command("dropUser", self.login2)
             yield conn.disconnect()
+
         finally:
             yield self.__mongod.stop()
 
@@ -125,7 +131,7 @@ class TestMongoAuth(unittest.TestCase, MongoAuth):
 
             n = pool_size + 1
 
-            yield defer.gatherResults([coll.insert({"x": 42}) for _ in range(n)])
+            yield defer.gatherResults([coll.insert_one({"x": 42}) for _ in range(n)])
 
             cnt = yield coll.count()
             self.assertEqual(cnt, n)
@@ -147,7 +153,7 @@ class TestMongoAuth(unittest.TestCase, MongoAuth):
         n = pool_size + 1
 
         try:
-            yield defer.gatherResults([coll.insert({"x": 42}) for _ in range(n)])
+            yield defer.gatherResults([coll.insert_one({"x": 42}) for _ in range(n)])
 
             cnt = yield coll.count()
             self.assertEqual(cnt, n)
@@ -208,6 +214,11 @@ class TestMongoAuth(unittest.TestCase, MongoAuth):
 
     @defer.inlineCallbacks
     def test_AuthOnTwoDBsParallel(self):
+        if self.ismaster["maxWireVersion"] >= 17:
+            raise unittest.SkipTest(
+                "MongoDB>=6.0 doesn't allow multiple authentication"
+            )
+
         conn = self.__get_connection()
 
         try:
@@ -224,8 +235,8 @@ class TestMongoAuth(unittest.TestCase, MongoAuth):
 
             yield defer.gatherResults(
                 [
-                    conn[self.db1][self.coll].insert({"x": 42}),
-                    conn[self.db2][self.coll].insert({"x": 42}),
+                    conn[self.db1][self.coll].insert_one({"x": 42}),
+                    conn[self.db2][self.coll].insert_one({"x": 42}),
                 ]
             )
         finally:
@@ -233,6 +244,11 @@ class TestMongoAuth(unittest.TestCase, MongoAuth):
 
     @defer.inlineCallbacks
     def test_AuthOnTwoDBsSequential(self):
+        if self.ismaster["maxWireVersion"] >= 17:
+            raise unittest.SkipTest(
+                "MongoDB>=6.0 doesn't allow multiple authentication"
+            )
+
         conn = self.__get_connection()
 
         try:
@@ -288,114 +304,6 @@ class TestMongoAuth(unittest.TestCase, MongoAuth):
             yield self.assertRaises(
                 TypeError, conn[self.db1].authenticate, 123, self.password1
             )
-        finally:
-            yield conn.disconnect()
-
-
-class TestMongoDBCR(unittest.TestCase, MongoAuth):
-
-    ua_login = "useradmin"
-    ua_password = "useradminpwd"
-
-    db1 = "db1"
-    coll = "coll"
-    login1 = "user1"
-    password1 = "pwd1"
-
-    @defer.inlineCallbacks
-    def setUp(self):
-        self.dbpath = tempfile.mkdtemp()
-
-        mongod_init = create_mongod(
-            port=self.port,
-            auth=True,
-            rootCreds=(self.ua_login, self.ua_password),
-            dbpath=self.dbpath,
-        )
-        yield mongod_init.start()
-        conn = connection.MongoConnection(self.host, self.port)
-        yield conn.admin.command("ismaster")
-        yield conn.disconnect()
-        yield mongod_init.stop()
-
-        mongod_noauth = create_mongod(port=self.port, auth=False, dbpath=self.dbpath)
-        yield mongod_noauth.start()
-        try:
-            try:
-                conn = connection.MongoConnection(self.host, self.port)
-
-                server_status = yield conn.admin.command("serverStatus")
-                major_version = int(server_status["version"].split(".")[0])
-                if major_version != 3:
-                    raise unittest.SkipTest("This test is only for MongoDB 3.x")
-
-                # Force MongoDB 3.x to use MONGODB-CR auth schema
-                yield conn.admin.system.version.update_one(
-                    {"_id": "authSchema"}, {"$set": {"currentVersion": 3}}, upsert=True
-                )
-            finally:
-                yield conn.disconnect()
-                yield mongod_noauth.stop()
-        except unittest.SkipTest:
-            shutil.rmtree(self.dbpath)
-            raise
-
-        self.mongod = create_mongod(port=self.port, auth=True, dbpath=self.dbpath)
-        yield self.mongod.start()
-
-        try:
-            conn = connection.MongoConnection(self.host, self.port)
-            try:
-                yield conn.admin.authenticate(self.ua_login, self.ua_password)
-
-                yield conn[self.db1].command(
-                    "createUser",
-                    self.login1,
-                    pwd=self.password1,
-                    roles=[{"role": "readWrite", "db": self.db1}],
-                )
-            finally:
-                yield conn.disconnect()
-        except:
-            yield self.mongod.stop()
-            raise
-
-    @defer.inlineCallbacks
-    def tearDown(self):
-        yield self.mongod.stop()
-        shutil.rmtree(self.dbpath)
-
-    @defer.inlineCallbacks
-    def test_ConnectionPool(self):
-        conn = connection.ConnectionPool(self.uri)
-
-        try:
-            yield conn[self.db1].authenticate(
-                self.login1, self.password1, mechanism="MONGODB-CR"
-            )
-            yield conn[self.db1][self.coll].insert_one({"x": 42})
-        finally:
-            yield conn.disconnect()
-
-    @defer.inlineCallbacks
-    def test_ByURI(self):
-        uri = f"mongodb://{self.login1}:{self.password1}@{self.host}:{self.port}/{self.db1}?authMechanism=MONGODB-CR"
-        conn = connection.ConnectionPool(uri)
-        try:
-            yield conn[self.db1][self.coll].insert_one({"x": 42})
-        finally:
-            yield conn.disconnect()
-
-    @defer.inlineCallbacks
-    def test_Fail(self):
-        conn = connection.ConnectionPool(self.uri)
-
-        try:
-            yield conn[self.db1].authenticate(
-                self.login1, self.password1 + "x", mechanism="MONGODB-CR"
-            )
-            query = conn[self.db1][self.coll].insert_one({"x": 42})
-            yield self.assertFailure(query, OperationFailure)
         finally:
             yield conn.disconnect()
 
