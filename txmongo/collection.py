@@ -39,6 +39,7 @@ from txmongo.protocol import (
     QUERY_SLAVE_OK,
     MongoProtocol,
     Msg,
+    QueryIterator,
 )
 from txmongo.pymongo_internals import (
     _check_command_response,
@@ -320,11 +321,22 @@ class Collection:
         rows = []
 
         def on_ok(result, this_func):
+            # print(f"{result = }")
             docs, dfr = result
 
             if docs:
                 rows.extend(docs)
                 return dfr.addCallback(this_func, this_func)
+            else:
+                return rows
+
+        def on_ok_v2(result: QueryIterator, this_func):
+            print(f"{result = }")
+            # docs, dfr = result
+
+            if result.current_results:
+                rows.extend(result.current_results)
+                return result.get_more().addCallback(this_func, this_func)
             else:
                 return rows
 
@@ -545,6 +557,7 @@ class Collection:
 
             if "cursor" not in reply:
                 # For example, when we run `explain` command
+                # return QueryIterator([reply], False, defer.succeed(([], None)), None)
                 return [reply], defer.succeed(([], None))
 
             cursor = reply["cursor"]
@@ -577,6 +590,7 @@ class Collection:
                 if to_fetch is None:
                     self.__close_cursor_without_response(proto, cursor["id"])
                     return out, defer.succeed(([], None))
+                    # return QueryIterator(out, True, None, None)
 
                 get_more = {
                     "getMore": cursor["id"],
@@ -589,8 +603,15 @@ class Collection:
                 next_reply = proto.send_simple_msg(get_more, codec_options)
                 next_reply.addCallback(this_func, this_func, proto, fetched)
                 return out, next_reply
+                # return QueryIterator(
+                #     out,
+                #     False,
+                #     lambda: next_reply,
+                #     lambda: self.__close_cursor_without_response(proto, cursor["id"]),
+                # )
 
             return out, defer.succeed(([], None))
+            # return QueryIterator(out, True, None, None)
 
         return self._database.connection.getprotocol().addCallback(after_connection)
 

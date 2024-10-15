@@ -23,7 +23,7 @@ from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass, field
 from hashlib import sha1
 from random import SystemRandom
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional
 
 import bson
 from bson import SON, Binary, CodecOptions
@@ -706,3 +706,11 @@ class MongoProtocol(MongoReceiverProtocol, MongoSenderProtocol):
             return result
         finally:
             self.__auth_lock.release()
+
+
+@dataclass(frozen=True, slots=True)
+class QueryIterator:
+    current_results: list[dict]
+    exhausted: bool
+    get_more: Optional[Callable[[], defer.Deferred]]
+    stop: Optional[Callable[[], Optional[defer.Deferred]]]
