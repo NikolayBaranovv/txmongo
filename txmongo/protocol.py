@@ -708,7 +708,7 @@ class MongoProtocol(MongoReceiverProtocol, MongoSenderProtocol):
             self.__auth_lock.release()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass
 class QueryIterator:
     current_results: list[dict]
     exhausted: bool
