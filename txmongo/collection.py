@@ -320,21 +320,9 @@ class Collection:
     ):
         rows = []
 
-        def on_ok(result, this_func):
-            # print(f"{result = }")
-            docs, dfr = result
+        def on_ok(result: QueryIterator, this_func):
 
-            if docs:
-                rows.extend(docs)
-                return dfr.addCallback(this_func, this_func)
-            else:
-                return rows
-
-        def on_ok_v2(result: QueryIterator, this_func):
-            print(f"{result = }")
-            # docs, dfr = result
-
-            if result.current_results:
+            if result and result.current_results:
                 rows.extend(result.current_results)
                 return result.get_more().addCallback(this_func, this_func)
             else:
@@ -399,6 +387,15 @@ class Collection:
                             do_something(doc)
                         docs, dfr = yield dfr
         """
+
+        def on_ok(result: QueryIterator, this_func):
+            if result:
+                return result.current_results, result.get_more().addCallback(
+                    this_func, this_func
+                )
+            else:
+                return [], None
+
         return self.__find_with_cursor(
             filter,
             projection,
@@ -409,7 +406,62 @@ class Collection:
             allow_partial_results,
             flags,
             _deadline,
+        ).addCallback(on_ok, on_ok)
+
+    @timeout
+    def iterate_with_cursor(
+        self,
+        filter=None,
+        projection=None,
+        skip=0,
+        limit=0,
+        sort=None,
+        batch_size=0,
+        *,
+        allow_partial_results: bool = False,
+        flags=0,
+        _deadline=None,
+    ):
+        """iterate_with_cursor(filter=None, projection=None, skip=0, limit=0, sort=None, batch_size=0, allow_partial_results=False)
+
+        Find documents in a collection and return them in one batch at a time.
+
+        Arguments are the same as for :meth:`find()`.
+
+        :returns: an instance of :class:`Deferred` that fires with iterator of ``docs``,
+            where ``docs`` is a partial result, returned by MongoDB in a first batch. Last result
+            will be ``[]``. You can iterate over the result set with code like that:
+            ::
+                @defer.inlineCallbacks
+                def query():
+                    async for items in iterate_batches_with_cursor(query):
+                        transformed_items = [transform(item) for item in items]
+                        yield transformed_items
+        """
+
+        iterator = yield self.__find_with_cursor(
+            filter,
+            projection,
+            skip,
+            limit,
+            sort,
+            batch_size,
+            allow_partial_results,
+            flags,
+            _deadline,
         )
+        try:
+            while True:
+                if iterator.current_results:
+                    yield iterator.current_results
+
+                if iterator.exhausted:
+                    break
+
+                iterator = yield iterator.get_more()
+        finally:
+            if not iterator.exhausted:
+                iterator.stop()
 
     _MODIFIERS = {
         "$query": "filter",
@@ -557,8 +609,7 @@ class Collection:
 
             if "cursor" not in reply:
                 # For example, when we run `explain` command
-                # return QueryIterator([reply], False, defer.succeed(([], None)), None)
-                return [reply], defer.succeed(([], None))
+                return QueryIterator([reply], False, lambda: defer.succeed(None), None)
 
             cursor = reply["cursor"]
             docs_key = "firstBatch"
@@ -589,8 +640,7 @@ class Collection:
 
                 if to_fetch is None:
                     self.__close_cursor_without_response(proto, cursor["id"])
-                    return out, defer.succeed(([], None))
-                    # return QueryIterator(out, True, None, None)
+                    return QueryIterator(out, True, lambda: defer.succeed(None), None)
 
                 get_more = {
                     "getMore": cursor["id"],
@@ -602,16 +652,14 @@ class Collection:
 
                 next_reply = proto.send_simple_msg(get_more, codec_options)
                 next_reply.addCallback(this_func, this_func, proto, fetched)
-                return out, next_reply
-                # return QueryIterator(
-                #     out,
-                #     False,
-                #     lambda: next_reply,
-                #     lambda: self.__close_cursor_without_response(proto, cursor["id"]),
-                # )
+                return QueryIterator(
+                    out,
+                    False,
+                    lambda: next_reply,
+                    lambda: self.__close_cursor_without_response(proto, cursor["id"]),
+                )
 
-            return out, defer.succeed(([], None))
-            # return QueryIterator(out, True, None, None)
+            return QueryIterator(out, True, lambda: defer.succeed(None), None)
 
         return self._database.connection.getprotocol().addCallback(after_connection)
 

@@ -710,7 +710,7 @@ class MongoProtocol(MongoReceiverProtocol, MongoSenderProtocol):
 
 @dataclass
 class QueryIterator:
-    current_results: list[dict]
+    current_results: list
     exhausted: bool
-    get_more: Optional[Callable[[], defer.Deferred]]
+    get_more: Callable[[], Optional[defer.Deferred]]
     stop: Optional[Callable[[], Optional[defer.Deferred]]]

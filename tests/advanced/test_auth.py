@@ -23,7 +23,6 @@ from twisted.internet import defer, ssl
 from twisted.internet.defer import TimeoutError
 from twisted.trial import unittest
 
-from tests.basic.utils import only_for_mongodb_older_than
 from tests.conf import MongoConf
 from tests.mongod import create_mongod
 from txmongo import connection
