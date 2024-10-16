@@ -409,7 +409,7 @@ class Collection:
         ).addCallback(on_ok, on_ok)
 
     @timeout
-    def iterate_with_cursor(
+    async def find_iterate_batches(
         self,
         filter=None,
         projection=None,
@@ -422,24 +422,23 @@ class Collection:
         flags=0,
         _deadline=None,
     ):
-        """iterate_with_cursor(filter=None, projection=None, skip=0, limit=0, sort=None, batch_size=0, allow_partial_results=False)
+        """find_iterate_batches(filter=None, projection=None, skip=0, limit=0, sort=None, batch_size=0, allow_partial_results=False)
 
         Find documents in a collection and return them in one batch at a time.
 
         Arguments are the same as for :meth:`find()`.
 
-        :returns: an instance of :class:`Deferred` that fires with iterator of ``docs``,
-            where ``docs`` is a partial result, returned by MongoDB in a first batch. Last result
-            will be ``[]``. You can iterate over the result set with code like that:
-            ::
-                @defer.inlineCallbacks
-                def query():
-                    async for items in iterate_batches_with_cursor(query):
-                        transformed_items = [transform(item) for item in items]
-                        yield transformed_items
+        This is asynchronous generator that you can use with `async for`.
+
+        ::
+            @defer.inlineCallbacks
+            async def query():
+                async for batch in coll.find_iterate_batches(query):
+                    for doc in batch:
+                        print(doc)
         """
 
-        iterator = yield self.__find_with_cursor(
+        iterator = await self.__find_with_cursor(
             filter,
             projection,
             skip,
@@ -458,10 +457,53 @@ class Collection:
                 if iterator.exhausted:
                     break
 
-                iterator = yield iterator.get_more()
+                iterator = await iterator.get_more()
         finally:
             if not iterator.exhausted:
                 iterator.stop()
+
+    @timeout
+    async def find_iterate(
+        self,
+        filter=None,
+        projection=None,
+        skip=0,
+        limit=0,
+        sort=None,
+        batch_size=0,
+        *,
+        allow_partial_results: bool = False,
+        flags=0,
+        _deadline=None,
+    ):
+        """find_iterate(filter=None, projection=None, skip=0, limit=0, sort=None, batch_size=0, allow_partial_results=False)
+
+        Find documents in a collection and return them asynchronously loading new batches from MongoDB as necessary.
+
+        Arguments are the same as for :meth:`find()`.
+
+        This is asynchronous generator that you can use with `async for`.
+
+        ::
+            @defer.inlineCallbacks
+            async def query():
+                async for doc in coll.find_iterate(query):
+                    print(doc)
+        """
+
+        async for batch in self.find_iterate_batches(
+            filter=filter,
+            projection=projection,
+            skip=skip,
+            limit=limit,
+            sort=sort,
+            batch_size=batch_size,
+            allow_partial_results=allow_partial_results,
+            flags=flags,
+            _deadline=_deadline,
+        ):
+            for doc in batch:
+                yield doc
 
     _MODIFIERS = {
         "$query": "filter",
@@ -650,12 +692,12 @@ class Collection:
                 if batch_size:
                     get_more["batchSize"] = batch_size
 
-                next_reply = proto.send_simple_msg(get_more, codec_options)
-                next_reply.addCallback(this_func, this_func, proto, fetched)
                 return QueryIterator(
                     out,
                     False,
-                    lambda: next_reply,
+                    lambda: proto.send_simple_msg(get_more, codec_options).addCallback(
+                        this_func, this_func, proto, fetched
+                    ),
                     lambda: self.__close_cursor_without_response(proto, cursor["id"]),
                 )
 
